@@ -36,10 +36,15 @@ namespace Gearhead {
 class Renderer3D;
 class Resources;
 
-/** A mesh of a 3DS scene; vertices are kept in world space (game axes) */
+/**
+ * A mesh of a 3DS scene. The vertices are placed in world space (game axes) at
+ * load time with the transform ALIBI applies: object space from the mesh
+ * matrix, minus the keyframer pivot, then the key-0 rotation and position.
+ */
 struct SceneMesh {
 	Common::String name;
 	Mesh3D mesh;
+	Vec3 objMin, objMax; ///< object-space bounds (MeshData +4, after the pivot)
 	Common::Array<const Material3D *> materials; ///< per polygon
 	bool visible = true;
 	bool lit = true;  ///< light mask (the car lot's Floor gets none)
@@ -51,6 +56,19 @@ struct SceneNode {
 	Vec3 pos;          ///< position key 0 (Node+0x58)
 	Vec3 pivot;
 	Mat4 rotation;     ///< rotation key 0 (Node+0x70)
+};
+
+/**
+ * A 3DS light (Load3DS_light 0x46c750): a point light. Colour 0x0010 (floats only),
+ * range DL_OUTER_RANGE 0x465a (default 300), intensity DL_MULTIPLIER 0x465b * 1.8
+ * (default multiplier 2.2)
+ */
+struct SceneLight {
+	Common::String name;
+	Vec3 pos;
+	Vec3 colour = Vec3(1, 1, 1);
+	float range = 300.0f;
+	float intensity = 2.2f * 1.8f;
 };
 
 /** Something drawn with a scene: a car clone, a shadow, a part on a shelf */
@@ -82,11 +100,17 @@ public:
 	Common::Array<Material3D *> _materials;
 	Common::Array<Texture3D *> _textures;
 	Common::Array<SceneNode> _nodes;
+	Common::Array<SceneLight> _lights;
 
 	struct Camera {
 		bool valid = false;
 		Vec3 pos, target;
-		float zoom = 1.0f;  ///< 1 / tan(lens / 2), the lens value taken as degrees
+		/**
+		 * 1 / tan(fov / 2): the camera chunk's lens value taken as degrees,
+		 * replaced by the keyframer's FOV track (Scene3DS_evalKeys) when there is one
+		 */
+		float zoom = 1.0f;
+		Common::String name;
 	} _camera;
 	Common::String _name;
 
@@ -101,6 +125,8 @@ private:
 	void readObject(Common::SeekableReadStream &s, uint32 end);
 	void readTriMesh(Common::SeekableReadStream &s, uint32 end, const Common::String &name);
 	void readKeyframer(Common::SeekableReadStream &s, uint32 end);
+	/** Face normals, vertex normals (Mesh_computeVertexNormals 0x4705b0) and bounds from the vertices */
+	static void computeNormals(SceneMesh &sm);
 	Texture3D *loadTexture(const Common::String &file);
 	Material3D *findMaterial(const Common::String &name) const;
 

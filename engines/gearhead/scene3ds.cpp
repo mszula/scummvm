@@ -291,7 +291,29 @@ void Scene3DS::readObject(Common::SeekableReadStream &s, uint32 end) {
 			s.readFloatLE();
 			const float lens = s.readFloatLE();
 			_camera.zoom = 1.0f / tanf(lens * 0.017453292f * 0.5f);
+			_camera.name = name;
 			_camera.valid = true;
+		} else if (c.id == 0x4600) {
+			// Load3DS_light: position, then the colour, outer range and multiplier sub-chunks
+			SceneLight l;
+			l.name = name;
+			l.pos = readVec(s);
+			float multiplier = 2.2f;
+			Chunk lc;
+			while (readChunk(s, c.end, lc)) {
+				if (lc.id == 0x0010) {
+					l.colour.x = s.readFloatLE();
+					l.colour.y = s.readFloatLE();
+					l.colour.z = s.readFloatLE();
+				} else if (lc.id == 0x465a) {
+					l.range = s.readFloatLE();
+				} else if (lc.id == 0x465b) {
+					multiplier = s.readFloatLE();
+				}
+				s.seek(lc.end);
+			}
+			l.intensity = multiplier * 1.8f;
+			_lights.push_back(l);
 		}
 		s.seek(c.end);
 	}
@@ -350,8 +372,27 @@ void Scene3DS::readTriMesh(Common::SeekableReadStream &s, uint32 end, const Comm
 			}
 			break;
 		}
+		case 0x4160: {
+			// Load3DS_meshMatrix: axes converted (C^T M C), transposed and orthonormalised; the vertices
+			// read so far move into object space: v = (v - origin) * M
+			float raw[9];
+			for (int i = 0; i < 9; i++)
+				raw[i] = s.readFloatLE();
+			const Vec3 origin = readVec(s);
+			const Vec3 x(raw[0], raw[1], raw[2]), y(raw[3], raw[4], raw[5]), z(raw[6], raw[7], raw[8]);
+			const Vec3 r0(x.x, -x.z, x.y), r1(-z.x, z.z, -z.y), r2(y.x, -y.z, y.y);
+			Vec3 m0(r0.x, r1.x, r2.x), m1(r0.y, r1.y, r2.y);
+			m0 = m0.lengthSq() > 0.0f ? m0.normalized() : Vec3();
+			m1 = m1 - m0 * m1.dot(m0);
+			m1 = m1.lengthSq() > 0.0f ? m1.normalized() : Vec3();
+			const Vec3 m2 = m0.cross(m1);
+			for (uint i = 0; i < verts.size(); i++) {
+				const Vec3 d = verts[i] - origin;
+				verts[i] = m0 * d.x + m1 * d.y + m2 * d.z;
+			}
+			break;
+		}
 		default:
-			// 0x4160 (mesh matrix) only moves the vertices into object space; we keep world space
 			break;
 		}
 		s.seek(c.end);
@@ -361,16 +402,8 @@ void Scene3DS::readTriMesh(Common::SeekableReadStream &s, uint32 end, const Comm
 	sm->name = name;
 	sm->mesh.name = name;
 	sm->mesh.vertices.resize(verts.size());
-	for (uint i = 0; i < verts.size(); i++) {
+	for (uint i = 0; i < verts.size(); i++)
 		sm->mesh.vertices[i].pos = verts[i];
-		if (i == 0) {
-			sm->mesh.boundsMin = sm->mesh.boundsMax = verts[i];
-		} else {
-			sm->mesh.boundsMin = Vec3(MIN(sm->mesh.boundsMin.x, verts[i].x), MIN(sm->mesh.boundsMin.y, verts[i].y), MIN(sm->mesh.boundsMin.z, verts[i].z));
-			sm->mesh.boundsMax = Vec3(MAX(sm->mesh.boundsMax.x, verts[i].x), MAX(sm->mesh.boundsMax.y, verts[i].y), MAX(sm->mesh.boundsMax.z, verts[i].z));
-		}
-	}
-	Common::Array<Vec3> normalSum(verts.size());
 	for (uint i = 0; i < faces.size(); i++) {
 		const Face &f = faces[i];
 		if (f.a >= verts.size() || f.b >= verts.size() || f.c >= verts.size())
@@ -402,19 +435,36 @@ void Scene3DS::readTriMesh(Common::SeekableReadStream &s, uint32 end, const Comm
 			}
 		}
 		p.fileMaterial = -1;
-		const Vec3 &a = verts[p.v[0]], &b = verts[p.v[1]], &cc = verts[p.v[2]];
-		p.normal = (b - a).cross(cc - a).normalized();
-		for (int k = 0; k < 3; k++)
-			normalSum[p.v[k]] += p.normal;
 		sm->mesh.polys.push_back(p);
 		sm->materials.push_back(faceMats[i]);
 	}
-	// Mesh_computeVertexNormals (0x4705b0): the sum of the face normals, normalised
-	for (uint i = 0; i < verts.size(); i++) {
-		const float l = normalSum[i].length();
-		sm->mesh.vertices[i].normal = (l == 0.0f || l > 1e30f) ? Vec3() : normalSum[i] * (1.0f / l);
-	}
+	computeNormals(*sm);
+	sm->objMin = sm->mesh.boundsMin;
+	sm->objMax = sm->mesh.boundsMax;
 	_meshes.push_back(sm);
+}
+
+void Scene3DS::computeNormals(SceneMesh &sm) {
+	Common::Array<MeshVertex> &v = sm.mesh.vertices;
+	Common::Array<Vec3> normalSum(v.size());
+	for (uint i = 0; i < sm.mesh.polys.size(); i++) {
+		MeshPoly &p = sm.mesh.polys[i];
+		const Vec3 &a = v[p.v[0]].pos, &b = v[p.v[1]].pos, &cc = v[p.v[2]].pos;
+		p.normal = (b - a).cross(cc - a).normalized();
+		for (int k = 0; k < 3; k++)
+			normalSum[p.v[k]] += p.normal;
+	}
+	// Mesh_computeVertexNormals (0x4705b0): the sum of the face normals, normalised
+	for (uint i = 0; i < v.size(); i++) {
+		const float l = normalSum[i].length();
+		v[i].normal = (l == 0.0f || l > 1e30f) ? Vec3() : normalSum[i] * (1.0f / l);
+		if (i == 0) {
+			sm.mesh.boundsMin = sm.mesh.boundsMax = v[i].pos;
+		} else {
+			sm.mesh.boundsMin = Vec3(MIN(sm.mesh.boundsMin.x, v[i].pos.x), MIN(sm.mesh.boundsMin.y, v[i].pos.y), MIN(sm.mesh.boundsMin.z, v[i].pos.z));
+			sm.mesh.boundsMax = Vec3(MAX(sm.mesh.boundsMax.x, v[i].pos.x), MAX(sm.mesh.boundsMax.y, v[i].pos.y), MAX(sm.mesh.boundsMax.z, v[i].pos.z));
+		}
+	}
 }
 
 void Scene3DS::readKeyframer(Common::SeekableReadStream &s, uint32 end) {
@@ -429,7 +479,34 @@ void Scene3DS::readKeyframer(Common::SeekableReadStream &s, uint32 end) {
 					node.name = readCString(s, k.end);
 					break;
 				case 0xb013:
+					// The pivot is subtracted from a mesh's (object-space) vertices at once (0x46dec0)
 					node.pivot = readVec(s);
+					if (c.id == 0xb002) {
+						SceneMesh *sm = findMesh(node.name);
+						if (sm) {
+							for (uint i = 0; i < sm->mesh.vertices.size(); i++)
+								sm->mesh.vertices[i].pos -= node.pivot;
+							computeNormals(*sm);
+							sm->objMin = sm->mesh.boundsMin;
+							sm->objMax = sm->mesh.boundsMax;
+						}
+					}
+					break;
+				case 0xb023:
+					// FOV track of a camera node: zoom = 1 / tan(fov / 2 degrees)
+					if (c.id == 0xb003) {
+						s.skip(2 + 8);
+						if (!s.readUint32LE())
+							break;
+						s.readUint32LE();
+						const uint16 accel = s.readUint16LE();
+						for (int bit = 0; bit < 5; bit++)
+							if (accel & (1 << bit))
+								s.readFloatLE();
+						const float fov = s.readFloatLE();
+						if (_camera.valid && node.name == _camera.name)
+							_camera.zoom = 1.0f / tanf(fov * 0.017453292f * 0.5f);
+					}
 					break;
 				case 0xb020:
 				case 0xb021: {
@@ -448,9 +525,10 @@ void Scene3DS::readKeyframer(Common::SeekableReadStream &s, uint32 end) {
 					} else {
 						const float angle = s.readFloatLE();
 						const Vec3 axis = readVec(s);
-						// The axis flip mirrors the rotation sense
+						// Quat_fromAxisAngle on the file axis, then the vector part converted like a point
+						// (0x46dbc0): a rotation by +angle about the converted axis
 						const Vec3 a = axis.normalized();
-						const float th = -angle, co = cosf(th), si = sinf(th), t = 1.0f - co;
+						const float th = angle, co = cosf(th), si = sinf(th), t = 1.0f - co;
 						Mat4 r;
 						// column-vector rotation R; stored transposed for row vectors
 						const float m[3][3] = {
@@ -473,6 +551,15 @@ void Scene3DS::readKeyframer(Common::SeekableReadStream &s, uint32 end) {
 			}
 			if (c.id == 0xb004)
 				node.name += ".target";
+			// A mesh is drawn with its node's key-0 transform: world = v * rotation + position
+			if (c.id == 0xb002) {
+				SceneMesh *sm = findMesh(node.name);
+				if (sm) {
+					for (uint i = 0; i < sm->mesh.vertices.size(); i++)
+						sm->mesh.vertices[i].pos = node.rotation.transformDir(sm->mesh.vertices[i].pos) + node.pos;
+					computeNormals(*sm);
+				}
+			}
 			_nodes.push_back(node);
 		}
 		s.seek(c.end);

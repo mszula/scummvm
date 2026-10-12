@@ -173,6 +173,9 @@ void YardArea::init(Scene3DS *scene, Widget *listener) {
 	}
 	// The camera stands at play_01: the walking eye height comes from the scene
 	_walk._eyeHeight = _walk._camera.row(3).y - _walk._floor.y;
+	const Vec3 eye = _walk._camera.row(3), fwd = _walk._camera.row(2);
+	debugC(1, kDebugGame, "Yard %s: eye (%.1f %.1f %.1f) forward (%.3f %.3f %.3f) floor y %.1f zoom %.3f, %d shelves",
+	       scene->_name.c_str(), eye.x, eye.y, eye.z, fwd.x, fwd.y, fwd.z, _walk._floor.y, _walk._zoom, _shelves.size());
 }
 
 void YardArea::addPart(Part *part) {
