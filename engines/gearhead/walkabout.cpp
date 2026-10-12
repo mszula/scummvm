@@ -30,10 +30,6 @@
 
 namespace Gearhead {
 
-// The bob state is global in the original (g_WalkBobPhase, g_WalkBobPrev), shared by every walkabout
-static float g_bobPhase = 0.0f;
-static float g_bobPrev = 0.0f;
-
 Walkabout::Walkabout() : _scene(nullptr), _zoom(1.0f), _far(10000.0f), _eyeHeight(100.0f), _bob(8.0f),
 	_moving(false), _listener(nullptr), _ambient(0.6f, 0.6f, 0.6f), _footstep(nullptr) {
 }
@@ -120,37 +116,40 @@ void Walkabout::move(const Vec3 &dir) {
 void Walkabout::updateBob() {
 	if (!_listener)
 		return;
+	// The bob state is global in the original (g_WalkBobPhase, g_WalkBobPrev), shared by every walkabout
+	float &phase = g_engine->_walkBobPhase;
+	float &prevBob = g_engine->_walkBobPrev;
 	const float rate = g_engine->frameDelta() * 15.0f;
 	const float pi = 3.1415927f, twoPi = 6.2831855f;
 	if (!_moving) {
 		// Ease back to the nearest of 0 and pi
-		while (g_bobPhase > twoPi)
-			g_bobPhase -= twoPi;
-		while (g_bobPhase < -twoPi)
-			g_bobPhase += twoPi;
-		if (fabsf(g_bobPhase - pi) > 0.0001f && fabsf(g_bobPhase) > 0.0001f) {
-			if (g_bobPhase < 1.5707964f) {
-				g_bobPhase = MAX(0.0f, g_bobPhase - rate);
-			} else if (g_bobPhase < pi) {
-				g_bobPhase = MIN(pi, g_bobPhase + rate);
-			} else if (g_bobPhase < 4.712389f) {
-				g_bobPhase = MAX(pi, g_bobPhase - rate);
+		while (phase > twoPi)
+			phase -= twoPi;
+		while (phase < -twoPi)
+			phase += twoPi;
+		if (fabsf(phase - pi) > 0.0001f && fabsf(phase) > 0.0001f) {
+			if (phase < 1.5707964f) {
+				phase = MAX(0.0f, phase - rate);
+			} else if (phase < pi) {
+				phase = MIN(pi, phase + rate);
+			} else if (phase < 4.712389f) {
+				phase = MAX(pi, phase - rate);
 			} else {
-				g_bobPhase += rate;
-				if (g_bobPhase > twoPi)
-					g_bobPhase = 0.0f;
+				phase += rate;
+				if (phase > twoPi)
+					phase = 0.0f;
 			}
 		}
 	} else {
-		g_bobPhase += rate;
+		phase += rate;
 	}
 	const float prevY = cameraPos().y;
-	float bob = sinf(g_bobPhase) * _bob;
+	float bob = sinf(phase) * _bob;
 	if (bob < 0.0f)
 		bob *= 0.5f;
-	if (g_bobPrev > 0.0f && g_bobPrev * bob < 0.0f)
+	if (prevBob > 0.0f && prevBob * bob < 0.0f)
 		_footstep->play();
-	g_bobPrev = bob;
+	prevBob = bob;
 	Vec3 p = cameraPos();
 	p.y = _floor.y + _eyeHeight + bob;
 	setCameraPos(p);

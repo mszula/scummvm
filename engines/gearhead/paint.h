@@ -164,6 +164,7 @@ private:
 	float _lastDist;
 	bool _gridValid;
 	Sound *_spray, *_bead1, *_bead2;
+	bool _shakeDown;           ///< g_SprayShakeDown
 	Graphics::ManagedSurface *_ghostPart;
 };
 

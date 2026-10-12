@@ -194,6 +194,18 @@ const Material3D *conditionHighlight(int condition);
 /** CondLevel +0x08 status colour (16-bit modes) */
 Vec3 conditionColour(int condition);
 
+/** The materials of the four condition levels (CondLevels_initColors 0x44f998), owned by the engine */
+class ConditionMaterials {
+public:
+	ConditionMaterials();
+	const Material3D *material(int condition) const;
+	const Material3D *highlight(int condition) const;
+
+private:
+	Material3D _material[4];
+	Material3D _highlight[4];
+};
+
 /** TEX_BITMAP -> square power-of-two RGBA texture (bilinear resample when needed) */
 void decodeTextureBitmap(const TLVChunk &bm, Texture3D &tex);
 /** Texture_makePow2 (0x465030): RGBA pixels -> square power of two, at most 256 */

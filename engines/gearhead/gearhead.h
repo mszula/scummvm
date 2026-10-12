@@ -47,7 +47,8 @@ class ManagedSurface;
  * This is the namespace of the Gearhead Garage engine, a reimplementation of
  * the VMech engine of "Snap-on Gearhead Garage" (Ratloop / Mekada, 1999).
  *
- * Status: start-up sequence, Sign In, the workshop with the job system.
+ * Status: the whole game: the workshop with the jobs and its tools, the Car Lot,
+ * the JunkYard, the Auction and the Catalog.
  *
  * Games using this engine:
  * - Snap-on Gearhead Garage
@@ -124,6 +125,10 @@ public:
 	BlitFont _fonts[kFontCount];
 	Renderer3D *_renderer3d;
 	CarList _cars;
+	ConditionMaterials _conditionMaterials;
+	Vec3 _paintColors[kNumPaintColors]; ///< Data\Gfx24\PaintColors.tga
+	/** The walk bob of the 3D scenes, shared by every walkabout (g_WalkBobPhase, g_WalkBobPrev) */
+	float _walkBobPhase, _walkBobPrev;
 	DecalLibrary _decals;
 	JobList _jobs;
 	MsvcRandom _rnd;

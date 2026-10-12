@@ -100,6 +100,10 @@ private:
 	Common::Array<Sound *> _calls, _shuffled;
 	uint32 _startTime;
 	int _duration;
+	// Globals in the original (0x4ed9f8, 0x4ed9fc, 0x4eda00): never reset between cars or visits
+	int _timerLastFrame;
+	int _lastPriceDrop;
+	int _lastBidderTick;
 };
 
 /** The 3D view of the auction block (BidPane, Auction+0x14c, vt 0x4d0944, rect (12,95)-(512,285)) */

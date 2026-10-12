@@ -525,20 +525,7 @@ const char *conditionName(int condition) {
 }
 
 const Material3D *conditionMaterial(int condition) {
-	static Material3D mats[4];
-	static bool init = false;
-	if (!init) {
-		// CondLevels_initColors (0x44f998), 16-bit mode: tint / 255, Gouraud, two-sided
-		static const float kTint[4][3] = { { 71, 49, 38 }, { 85, 78, 67 }, { 153, 134, 128 }, { 255, 255, 255 } };
-		for (int i = 0; i < 4; i++) {
-			mats[i].shadeColor = 2;
-			mats[i].flags = Material3D::kFlagTwoSided;
-			mats[i].color = Vec3(kTint[i][0] / 255.0f, kTint[i][1] / 255.0f, kTint[i][2] / 255.0f);
-			mats[i].name = conditionName(i);
-		}
-		init = true;
-	}
-	return &mats[CLIP(condition, 0, 3)];
+	return g_engine->_conditionMaterials.material(condition);
 }
 
 // CondLevels_initColors (0x44f998), 16-bit (D3D) status colours
@@ -550,26 +537,38 @@ Vec3 conditionColour(int condition) {
 }
 
 const Material3D *conditionHighlight(int condition) {
-	static Material3D mats[4];
-	static bool init = false;
-	if (!init) {
-		// CondLevel_ctor (0x44f810): additive, vertex alpha, Gouraud, two-sided
-		for (int i = 0; i < 4; i++) {
-			mats[i].blendSrc = 1;
-			mats[i].blendDst = 1;
-			mats[i].shadeAlpha = 2;
-			mats[i].shadeColor = 2;
-			mats[i].updateTranslucency();
-			mats[i].flags |= Material3D::kFlagTwoSided;
-			mats[i].color = conditionColour(i);
-			mats[i].name = conditionName(i);
-		}
-		init = true;
-	}
-	return &mats[CLIP(condition, 0, 3)];
+	return g_engine->_conditionMaterials.highlight(condition);
 }
 
-static float g_paintColors[kNumPaintColors][3];
+ConditionMaterials::ConditionMaterials() {
+	// CondLevels_initColors (0x44f998), 16-bit mode: tint / 255, Gouraud, two-sided
+	static const float kTint[4][3] = { { 71, 49, 38 }, { 85, 78, 67 }, { 153, 134, 128 }, { 255, 255, 255 } };
+	for (int i = 0; i < 4; i++) {
+		Material3D &m = _material[i];
+		m.shadeColor = 2;
+		m.flags = Material3D::kFlagTwoSided;
+		m.color = Vec3(kTint[i][0] / 255.0f, kTint[i][1] / 255.0f, kTint[i][2] / 255.0f);
+		m.name = conditionName(i);
+		// CondLevel_ctor (0x44f810): the highlight is additive, vertex alpha, Gouraud, two-sided
+		Material3D &h = _highlight[i];
+		h.blendSrc = 1;
+		h.blendDst = 1;
+		h.shadeAlpha = 2;
+		h.shadeColor = 2;
+		h.updateTranslucency();
+		h.flags |= Material3D::kFlagTwoSided;
+		h.color = conditionColour(i);
+		h.name = conditionName(i);
+	}
+}
+
+const Material3D *ConditionMaterials::material(int condition) const {
+	return &_material[CLIP(condition, 0, 3)];
+}
+
+const Material3D *ConditionMaterials::highlight(int condition) const {
+	return &_highlight[CLIP(condition, 0, 3)];
+}
 
 void loadPaintColors(Resources &res) {
 	const Graphics::PixelFormat rgb24 = Graphics::PixelFormat::createFormatRGB24();
@@ -582,16 +581,13 @@ void loadPaintColors(Resources &res) {
 			break;
 		byte r, g, b;
 		img->format.colorToRGB(img->getPixel(x, y), r, g, b);
-		g_paintColors[i][0] = r / 256.0f;
-		g_paintColors[i][1] = g / 256.0f;
-		g_paintColors[i][2] = b / 256.0f;
+		g_engine->_paintColors[i] = Vec3(r / 256.0f, g / 256.0f, b / 256.0f);
 	}
 	delete img;
 }
 
 Vec3 paintColor(int index) {
-	const float *c = g_paintColors[CLIP(index, 0, kNumPaintColors - 1)];
-	return Vec3(c[0], c[1], c[2]);
+	return g_engine->_paintColors[CLIP(index, 0, kNumPaintColors - 1)];
 }
 
 } // End of namespace Gearhead

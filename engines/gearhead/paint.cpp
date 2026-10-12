@@ -292,10 +292,8 @@ void DecalEdit::buildCursor() {
 
 // ---------------------------------------------------------------- SprayCan
 
-static bool g_sprayShakeDown = false; // g_SprayShakeDown
-
 SprayCan::SprayCan() : _brush(nullptr), _radius(0), _fill(false), _decal(nullptr), _blocked(false), _cellW(1.0f), _cellH(1.0f),
-	_originX(0.0f), _originY(0.0f), _lastDist(0.0f), _gridValid(false), _spray(nullptr), _bead1(nullptr), _bead2(nullptr),
+	_originX(0.0f), _originY(0.0f), _lastDist(0.0f), _gridValid(false), _spray(nullptr), _bead1(nullptr), _bead2(nullptr), _shakeDown(false),
 	_ghostPart(nullptr) {
 }
 
@@ -358,11 +356,11 @@ void SprayCan::onHover(const Common::Point &p) {
 		// Shaking the can: 17 pixels down, then up again
 		const int prevY = input->prevMouse().y;
 		if (fabs((double)(prevY - p.y)) >= 17.0) {
-			if (!g_sprayShakeDown && prevY < p.y) {
-				g_sprayShakeDown = true;
+			if (!_shakeDown && prevY < p.y) {
+				_shakeDown = true;
 				_bead1->play();
-			} else if (g_sprayShakeDown && p.y < prevY) {
-				g_sprayShakeDown = false;
+			} else if (_shakeDown && p.y < prevY) {
+				_shakeDown = false;
 				_bead2->play();
 			}
 		}

@@ -56,7 +56,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
 	_auction(nullptr), _carLot(nullptr), _catalog(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
-	_prevGameTime(0), _frameDelta(0.1f) {
+	_prevGameTime(0), _frameDelta(0.1f), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
 	g_engine = this;
 }
 

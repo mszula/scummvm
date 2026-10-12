@@ -46,11 +46,6 @@ static int ftol(double v) {
 	return (int)(uint32)(uint64)(int64)v;
 }
 
-// The three timers of auction.cpp are globals that are never reset (between cars or visits)
-static int g_auctionTimerLastFrame = 0; // 0x4ed9f8
-static int g_auctionLastPriceDrop = 0;  // 0x4ed9fc
-static int g_auctionLastBidderTick = 0; // 0x4eda00
-
 static const int kAuctionRegions[3] = { 1, 2, 3 }; // g_AuctionRegionIds 0x4e1dc8
 
 int auctionRoundDown5(float x) {
@@ -88,7 +83,8 @@ bool Bidder::wantsToBid(MsvcRandom &rnd) const {
 // ---------------------------------------------------------------- Auctioneer
 
 Auctioneer::Auctioneer() : _currentBid(0), _askingPrice(0), _yourBid(0), _timeLeft(0.0f), _partsValue(0), _lo(0), _hi(0),
-	_sold(false), _timerPos(266, 294), _timer(nullptr), _callIndex(0), _startTime(0), _duration(20) {
+	_sold(false), _timerPos(266, 294), _timer(nullptr), _callIndex(0), _startTime(0), _duration(20),
+	_timerLastFrame(0), _lastPriceDrop(0), _lastBidderTick(0) {
 	_currentBox.setRect(Common::Rect(519, 125, 623, 153));
 	_askingBox.setRect(Common::Rect(519, 205, 623, 233));
 	_yourBox.setRect(Common::Rect(519, 283, 623, 311));
@@ -199,9 +195,9 @@ void Auctioneer::updateTimer() {
 		_sold = true;
 	// Timer.tga: 16 frames of 23x23, blitted only when the frame changes
 	const int x = ftol(15.0 - (double)(_timeLeft / (float)_duration) * 15.0) * 23;
-	if (x != g_auctionTimerLastFrame && _timer)
+	if (x != _timerLastFrame && _timer)
 		g_engine->_gfx->blitRect(kPageBoth, *_timer, Common::Rect(x, 0, x + 23, 23), _timerPos.x, _timerPos.y);
-	g_auctionTimerLastFrame = x;
+	_timerLastFrame = x;
 }
 
 void Auctioneer::shuffleCalls() {
@@ -233,16 +229,16 @@ void Auctioneer::update() {
 	const int now = (int)g_engine->gameTimeMs();
 	updateTimer();
 	// Every 2 s (absolute, also right after a bid) the asking price drops by 25, not below the bid + 25
-	if ((double)_duration * 0.1 * 1000.0 + (double)g_auctionLastPriceDrop <= (double)now) {
-		g_auctionLastPriceDrop = now;
+	if ((double)_duration * 0.1 * 1000.0 + (double)_lastPriceDrop <= (double)now) {
+		_lastPriceDrop = now;
 		_askingPrice -= 25;
 		if (_askingPrice <= _currentBid + 25)
 			_askingPrice = _currentBid + 25;
 		refreshDisplay();
 	}
 	// Every 750 ms: of the bidders that want to bid, the least aggressive one bids
-	if (g_auctionLastBidderTick + 750 <= now) {
-		g_auctionLastBidderTick = now;
+	if (_lastBidderTick + 750 <= now) {
+		_lastBidderTick = now;
 		float minAggr = 99.0f;
 		bool any = false;
 		for (uint i = 0; i < _bidders.size(); i++) {
