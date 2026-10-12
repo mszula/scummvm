@@ -311,6 +311,16 @@ static TGLenum blendFactor(int f) {
 	}
 }
 
+void Renderer3D::forgetTexture(Texture3D *t) {
+	TextureMap::iterator it = _textures.find(t);
+	if (it == _textures.end())
+		return;
+	TGLuint id = it->_value.id;
+	tglDeleteTextures(1, &id);
+	_textures.erase(it);
+	_bound = nullptr;
+}
+
 uint32 Renderer3D::textureId(Texture3D *t) {
 	TextureMap::iterator it = _textures.find(t);
 	if (it != _textures.end() && it->_value.version == t->version)

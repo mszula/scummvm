@@ -27,6 +27,8 @@
 
 #include "gearhead/cardata.h"
 #include "gearhead/detection.h"
+#include "gearhead/gearhead.h"
+#include "gearhead/renderer3d.h"
 #include "gearhead/resources.h"
 #include "gearhead/sound.h"
 #include "gearhead/tlv.h"
@@ -34,6 +36,11 @@
 namespace Gearhead {
 
 // ---------------------------------------------------------------- Texture3D
+
+Texture3D::~Texture3D() {
+	if (g_engine && g_engine->_renderer3d)
+		g_engine->_renderer3d->forgetTexture(this);
+}
 
 void Texture3D::create(int sz) {
 	size = sz;

@@ -73,6 +73,8 @@ GearheadEngine::~GearheadEngine() {
 	delete _msgBox;
 	delete _script;
 	delete _renderer3d;
+	// The textures of the car models are destroyed after the renderer
+	_renderer3d = nullptr;
 	delete _jukebox;
 	delete _snd;
 	delete _input;

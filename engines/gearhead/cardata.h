@@ -23,6 +23,7 @@
 #define GEARHEAD_CARDATA_H
 
 #include "common/array.h"
+#include "common/noncopyable.h"
 #include "common/str.h"
 
 #include "gearhead/math3d.h"
@@ -45,13 +46,16 @@ enum {
 };
 
 /** Square power-of-two RGBA texture (Texture_makePow2 0x465030: at most 256) */
-struct Texture3D {
+struct Texture3D : Common::NonCopyable {
 	Common::String name;
 	int size = 0;
 	uint32 flags = 1;              ///< TEX_FLAGS: bit0 bilinear, bit2/3 clamp U/V
 	Common::Array<byte> rgba;      ///< size * size * 4, top row first
 	uint32 version = 0;            ///< bumped whenever the pixels change (re-upload)
 
+	Texture3D() {}
+	/** The renderer drops its copy, so that a new texture at the same address is uploaded again */
+	~Texture3D();
 	void create(int sz);
 	void fill(byte r, byte g, byte b);
 	void setPixel(int x, int y, byte r, byte g, byte b);

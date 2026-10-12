@@ -72,6 +72,8 @@ public:
 	void setAmbient(const Vec3 &ambient) { _ambient = ambient; }
 	void clearLights() { _lights.clear(); }
 	void addLight(const Light3D &light) { _lights.push_back(light); }
+	/** Frees the uploaded copy of a texture that is being destroyed */
+	void forgetTexture(Texture3D *t);
 
 	/**
 	 * DrawMesh: @p materials holds one material per polygon (nullptr = skip);
