@@ -1,0 +1,183 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#ifndef GEARHEAD_TAGS_H
+#define GEARHEAD_TAGS_H
+
+namespace Gearhead {
+
+/**
+ * Field ids of the VMech tagged (TLV) file format used by .car, .jpk, .dpk,
+ * .mek and update files. The original assigns them at static-init time
+ * (id -666 means "previous + 1"); this is the resulting table.
+ */
+enum TagId {
+	kTag_VERSION = 0,
+	kTag_CARFILE = 1,
+	kTag_DECALFILE = 2,
+	kTag_MECHANICFILE = 3,
+	kTag_JOBFILE = 4,
+	kTag_UPDATEFILE = 5,
+	kTag_CARDATA = 100,
+	kTag_DECALDATA = 101,
+	kTag_MECHANIC = 102,
+	kTag_JOBDATA = 103,
+	kTag_JOBPHASEIMAGE = 104,
+	kTag_UPDATEDATA = 105,
+	kTag_CD_ID = 200,
+	kTag_CD_NAME = 201,
+	kTag_CD_TEXTURE = 202,
+	kTag_CD_MATERIAL = 203,
+	kTag_CD_AUTOMESH = 204,
+	kTag_CD_SPECMESH = 205,
+	kTag_CD_PARTDATA = 206,
+	kTag_CD_SOUND_NOSTARTER = 207,
+	kTag_CD_SOUND_FALSESTART = 208,
+	kTag_CD_SOUND_IGNITION = 209,
+	kTag_CD_MINSKILL = 210,
+	kTag_PD_ID = 300,
+	kTag_PD_NAME = 301,
+	kTag_PD_CUSTOM = 302,
+	kTag_PD_REGION = 303,
+	kTag_PD_MESHNAME = 304,
+	kTag_PD_COSTMIN = 305,
+	kTag_PD_COSTMAX = 306,
+	kTag_PD_ATTACHDEP = 307,
+	kTag_PD_REMOVEDEP = 308,
+	kTag_PD_MUTEXCSET = 309,
+	kTag_PD_AMEA = 310,
+	kTag_PD_VIC = 311,
+	kTag_PD_SPECIAL = 312,
+	kTag_PD_BOLT = 313,
+	kTag_PD_MULTIMAT = 314,
+	kTag_TEX_NAME = 400,
+	kTag_TEX_FLAGS = 401,
+	kTag_TEX_BITMAP = 402,
+	kTag_MMAT_MATERIALINDEX = 500,
+	kTag_MMAT_SWITCHPOLYLIST = 501,
+	kTag_MAT_NAME = 600,
+	kTag_MAT_COLOR = 601,
+	kTag_MAT_BLENDSRC = 602,
+	kTag_MAT_BLENDDST = 603,
+	kTag_MAT_SHADEALPHA = 604,
+	kTag_MAT_SHADECOLOR = 605,
+	kTag_MAT_ALPHA = 606,
+	kTag_MAT_FLAGS = 607,
+	kTag_MAT_TEXINDEX1 = 608,
+	kTag_MAT_TEXINDEX2 = 609,
+	kTag_MESH_NAME = 700,
+	kTag_MESH_INDEX = 701,
+	kTag_MESH_LOC = 702,
+	kTag_MESH_MATRIXX = 703,
+	kTag_MESH_MATRIXY = 704,
+	kTag_MESH_MATRIXZ = 705,
+	kTag_MESH_NUMPOLYS = 706,
+	kTag_MESH_NUMVERTS = 707,
+	kTag_MESH_VERT = 708,
+	kTag_MESH_POLY = 709,
+	kTag_POLY_VERTINDEX1 = 800,
+	kTag_POLY_VERTINDEX2 = 801,
+	kTag_POLY_VERTINDEX3 = 802,
+	kTag_POLY_MAP1 = 803,
+	kTag_POLY_MAP2 = 804,
+	kTag_POLY_MAP3 = 805,
+	kTag_POLY_MATINDEX = 806,
+	kTag_VERT_LOC = 900,
+	kTag_VERT_NORMAL = 901,
+	kTag_BITMAP_WIDTH = 1000,
+	kTag_BITMAP_HEIGHT = 1001,
+	kTag_BITMAP_FORMAT = 1002,
+	kTag_BITMAP_DATA = 1003,
+	kTag_BITMAP_PALETTE = 1004,
+	kTag_DD_ID = 1100,
+	kTag_DD_NAME = 1101,
+	kTag_DD_COST = 1102,
+	kTag_DD_COLORTYPE = 1103,
+	kTag_DD_NUMPERBUY = 1104,
+	kTag_DD_IMAGE = 1105,
+	kTag_PART_ID = 1200,
+	kTag_PART_AUTOID = 1201,
+	kTag_PART_CONDITION = 1202,
+	kTag_PART_VALUEWIGGLE = 1203,
+	kTag_PBANK_AUTOID = 1300,
+	kTag_PBANK_INBINPART = 1301,
+	kTag_PBANK_INYARDPART = 1302,
+	kTag_MECH_ID = 1400,
+	kTag_MECH_NAME = 1401,
+	kTag_MECH_SKILLINDEX = 1402,
+	kTag_MECH_CASH = 1403,
+	kTag_MECH_TOTALCAREERAUTOS = 1404,
+	kTag_MECH_TOTALWORKTIME = 1405,
+	kTag_MECH_NUMCURAUTOS = 1406,
+	kTag_MECH_PARTSBANK = 1407,
+	kTag_MECH_AUTO = 1408,
+	kTag_MECH_DECAL = 1409,
+	kTag_MECH_LASTAUTONUM = 1410,
+	kTag_MECH_COMPLETEDJOBS = 1411,
+	kTag_MECH_AUTOJOBREQUEST = 1412,
+	kTag_CAR_ID = 1500,
+	kTag_CAR_ISTOP = 1501,
+	kTag_CAR_REPAIRTIME = 1502,
+	kTag_CAR_REPAIRCOST = 1503,
+	kTag_CAR_PURCHASECOST = 1504,
+	kTag_CAR_CAREERNUM = 1505,
+	kTag_CAR_PART = 1506,
+	kTag_CAR_PAINTONTEX = 1507,
+	kTag_DECAL_ID = 1600,
+	kTag_DECAL_COPIES = 1601,
+	kTag_JOB_ID = 1700,
+	kTag_JOB_CARID = 1701,
+	kTag_JOB_ANXIETY = 1702,
+	kTag_JOB_FEE = 1703,
+	kTag_JOB_CARCOLOR = 1704,
+	kTag_JOB_CARBITMAP = 1705,
+	kTag_JOB_LEGALMODES = 1706,
+	kTag_JOB_PHASE = 1707,
+	kTag_JOB_STARTSTAT = 1708,
+	kTag_JOB_COMPLETESTAT = 1709,
+	kTag_JOB_ALLOWCUSTOMPARTS = 1710,
+	kTag_JOB_ILLEGALPART = 1711,
+	kTag_JP_TYPE = 1800,
+	kTag_JP_TEXT = 1801,
+	kTag_JP_IMAGEINDEX = 1802,
+	kTag_JS_TYPE = 1900,
+	kTag_JS_SUBJECT = 1901,
+	kTag_JS_CONDITION = 1902,
+	kTag_FL_IR = 2000,
+	kTag_FL_NAME = 2001,
+	kTag_FL_DATA = 2002,
+	kTag_IS_PARTID = 2100,
+	kTag_IS_WAVFILE = 2101,
+	kTag_UPDATE_NAME = 5000,
+	kTag_UPDATE_ID = 5001,
+	kTag_UPDATE_DESCRIPTION = 5002,
+	kTag_UPDATE_CRC = 5003,
+	kTag_UPDATE_DESTLOC = 5004,
+	kTag_UPDATE_REQUIRES = 5005,
+	kTag_UPDATE_INSTALLTYPE = 5006,
+	kTag_UPDATE_FILENAME = 5007,
+	kTag_UPDATE_FILE = 5008,
+	kTag_UPDATE_SIZE = 5009,
+};
+
+} // End of namespace Gearhead
+
+#endif // GEARHEAD_TAGS_H
