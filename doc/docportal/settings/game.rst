@@ -50,7 +50,7 @@ The Game tab also shows settings unique to the game engine for the selected game
 To find out which engine powers your game, have a look at the ScummVM Supported Games `wiki page
 <https://wiki.scummvm.org/index.php?title=Category:Supported_Games>`_ or :ref:`group <group>` games by Engine in the Launcher.
 
-Engines: ADL_ | AGI_ | AGOS_ | Bladerunner_ | Buried_ | CGE_ | CGE2_ | Chewy_ | Cine_ | Drascula_ | Dreamweb_ | Freescape_ | Griffon_ | GrimE_ | HDB_ | Hopkins_ | Hypno_ | Kyra_ | Lure_ | Macs2_ | MADE_ | MADS_ | mTropolis_ | Myst3_ | Nancy_ | Neverhood_ | SCI_ | SCUMM_ | Sherlock_ | Sky_ | Stark_ | Supernova_ | Sword2_ | Sword25_ | Toltecs_ | Trecision_ | Ultima_ | V-Cruise_ | Wintermute_ | Xeen_ | ZVision_
+Engines: ADL_ | AGI_ | AGOS_ | Bladerunner_ | Buried_ | CGE_ | CGE2_ | Chewy_ | Cine_ | Drascula_ | Dreamweb_ | Freescape_ | Gearhead_ | Griffon_ | GrimE_ | HDB_ | Hopkins_ | Hypno_ | Kyra_ | Lure_ | Macs2_ | MADE_ | MADS_ | mTropolis_ | Myst3_ | Nancy_ | Neverhood_ | SCI_ | SCUMM_ | Sherlock_ | Sky_ | Stark_ | Supernova_ | Sword2_ | Sword25_ | Toltecs_ | Trecision_ | Ultima_ | V-Cruise_ | Wintermute_ | Xeen_ | ZVision_
 
 
 
@@ -458,6 +458,20 @@ Disable falling
 	Stops player from falling over edges.
 
 	*disable_falling*
+
+,,,,,,,,,
+
+.. _Gearhead:
+
+Gearhead
+**********
+
+.. _gearheadbugs:
+
+Fix original bugs
+	Fixes bugs of the original game, such as the auction valuation and the scrap costs. When disabled, the game behaves exactly like the original.
+
+	*fix_original_bugs*
 
 ,,,,,,,,,
 
