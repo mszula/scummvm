@@ -27,8 +27,10 @@
 #include "common/str.h"
 #include "engines/engine.h"
 
+#include "gearhead/cardata.h"
 #include "gearhead/detection.h"
 #include "gearhead/font.h"
+#include "gearhead/jobs.h"
 #include "gearhead/random.h"
 
 namespace Common {
@@ -57,6 +59,7 @@ class Gfx;
 class Input;
 class JukeBox;
 class Mechanic;
+class Renderer3D;
 class Resources;
 class SignInScreen;
 class SoundManager;
@@ -83,6 +86,8 @@ public:
 
 	/** Milliseconds since start (g_GameTimeMs, Timer_update 0x454d24) */
 	uint32 gameTimeMs() const;
+	/** Smoothed frame time in seconds (g_FrameDelta, Timer_update 0x454d24) */
+	float frameDelta() const { return _frameDelta; }
 
 	/** Ask the main loop to end without saving (the sign-in screen's Exit / quit flag) */
 	void requestQuit() { _quitRequested = true; }
@@ -101,6 +106,9 @@ public:
 	JukeBox *_jukebox;
 	AutoScript *_script;
 	BlitFont _fonts[kFontCount];
+	Renderer3D *_renderer3d;
+	CarList _cars;
+	JobList _jobs;
 	MsvcRandom _rnd;
 
 	Graphics::ManagedSurface *_pointer;
@@ -122,6 +130,8 @@ private:
 	bool _quitRequested;
 	bool _saveOnQuit;   ///< Alt+F4 (and quitting through ScummVM) saves the mechanic
 	uint32 _startTime;
+	uint32 _lastFrameTime;
+	float _frameDelta;
 };
 
 extern GearheadEngine *g_engine;

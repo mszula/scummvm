@@ -22,6 +22,7 @@
 #ifndef GEARHEAD_SCREENS_H
 #define GEARHEAD_SCREENS_H
 
+#include "gearhead/carview.h"
 #include "gearhead/ui.h"
 
 namespace Gearhead {
@@ -52,12 +53,17 @@ private:
 class WorkShopScreen : public Pane {
 public:
 	WorkShopScreen();
+	~WorkShopScreen() override;
 	void init();
 	void activate();
 	void onKeyDown(int key) override;
+	void onRefresh() override;
+
+	CarView _carView;
 
 private:
 	Graphics::ManagedSurface *_background;
+	CarInstance *_car; ///< temporary owner until jobs and garages are implemented
 };
 
 } // End of namespace Gearhead

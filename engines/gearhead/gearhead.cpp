@@ -33,6 +33,7 @@
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
 #include "gearhead/mechanic.h"
+#include "gearhead/renderer3d.h"
 #include "gearhead/resources.h"
 #include "gearhead/screens.h"
 #include "gearhead/signin.h"
@@ -44,8 +45,8 @@ GearheadEngine *g_engine;
 
 GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _res(nullptr), _gfx(nullptr), _input(nullptr), _snd(nullptr), _jukebox(nullptr),
-	_script(nullptr), _pointer(nullptr), _mechanic(nullptr), _signIn(nullptr), _workShop(nullptr), _credits(nullptr),
-	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0) {
+	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _signIn(nullptr), _workShop(nullptr), _credits(nullptr),
+	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _lastFrameTime(0), _frameDelta(0.1f) {
 	g_engine = this;
 }
 
@@ -55,6 +56,7 @@ GearheadEngine::~GearheadEngine() {
 	delete _credits;
 	delete _mechanic;
 	delete _script;
+	delete _renderer3d;
 	delete _jukebox;
 	delete _snd;
 	delete _input;
@@ -143,6 +145,11 @@ bool GearheadEngine::runFrame() {
 		_quitRequested = true;
 		return false;
 	}
+	// Timer_update (0x454d24): smoothed frame time
+	const uint32 now = g_system->getMillis();
+	if (_lastFrameTime)
+		_frameDelta = (now - _lastFrameTime) / 1000.0f * 0.15f + _frameDelta * 0.85f;
+	_lastFrameTime = now;
 	_input->dispatchFrame();
 	_gfx->present();
 	g_system->delayMillis(10);
@@ -202,6 +209,7 @@ void GearheadEngine::runStartup() {
 	};
 
 	// Paint colours, blit fonts, pointer
+	loadPaintColors(*_res);
 	if (!loadGameFonts(*_res, _fonts))
 		error("Failed to load fonts");
 	_pointer = _res->getImage("Pointers\\Glove.tga");
@@ -209,9 +217,11 @@ void GearheadEngine::runStartup() {
 	_gfx->showCursor(true);
 	progress(); // FixFonts (never drawn by the original)
 	progress(); // global materials
-	progress(); // Cars (not implemented yet)
+	_cars.loadAll(*_res);
+	progress(); // Cars (headers; full models load on demand)
 	progress(); // Decals (not implemented yet)
-	progress(); // Jobs (not implemented yet)
+	_jobs.loadAll(*_res, _rnd);
+	progress(); // Jobs
 
 	_workShop = new WorkShopScreen();
 	_workShop->init();
@@ -255,6 +265,10 @@ Common::Error GearheadEngine::run() {
 
 	_gfx = new Gfx();
 	_gfx->init(format);
+#ifdef USE_TINYGL
+	_renderer3d = new Renderer3D();
+	_renderer3d->init(format);
+#endif
 	_res = new Resources();
 	_res->init(cabinet, format);
 	_input = new Input();

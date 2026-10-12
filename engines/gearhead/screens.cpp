@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "graphics/managed_surface.h"
 
+#include "gearhead/car.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -83,12 +84,17 @@ void CreditsScreen::back() {
 
 // ---------------------------------------------------------------- WorkShop (placeholder)
 
-WorkShopScreen::WorkShopScreen() : _background(nullptr) {
+WorkShopScreen::WorkShopScreen() : _background(nullptr), _car(nullptr) {
+}
+
+WorkShopScreen::~WorkShopScreen() {
+	delete _car;
 }
 
 void WorkShopScreen::init() {
 	setRect(0, 0, 640, 480);
 	_background = g_engine->_res->getImage("WorkShop.tga");
+	addChild(&_carView);
 }
 
 void WorkShopScreen::activate() {
@@ -97,8 +103,18 @@ void WorkShopScreen::activate() {
 	Gfx *gfx = g_engine->_gfx;
 	gfx->blit(kPageBoth, *_background, 0, 0);
 	drawMechanicHud();
-	g_engine->_fonts[kFontStandard].drawText(*gfx, "The 3D workshop is not implemented yet. Press Esc to sign out.",
-	                                          Common::Rect(15, 180, 375, 260), kAlignCenter, kAlignCenter, kKeyDefault, kPageBoth);
+
+	// Until the job dialogs exist: show the car of the job the original would offer
+	delete _car;
+	_car = nullptr;
+	Mechanic *m = g_engine->_mechanic;
+	const Job *job = m ? g_engine->_jobs.pickNext(*m, g_engine->_cars) : nullptr;
+	if (job) {
+		debugC(1, kDebugGame, "Job %d offered: car %d, fee %.2f", job->id, job->carId, job->fee);
+		_car = job->createCar(g_engine->_cars, g_engine->_rnd);
+	}
+	_carView.setCar(_car, 0);
+
 	g_engine->_input->setRoot(this);
 	g_engine->_input->setKeyTarget(this);
 	refresh();
@@ -106,8 +122,17 @@ void WorkShopScreen::activate() {
 }
 
 void WorkShopScreen::onKeyDown(int key) {
-	if (key == kScanEsc)
+	// WorkShop slot 12 (0x4198e6): called every frame while a key is held
+	if (key == kScanEsc) {
+		_carView.setCar(nullptr, 0);
 		g_engine->_signIn->activate(true);
+		return;
+	}
+	_carView.onArrowKey(key, g_engine->frameDelta());
+}
+
+void WorkShopScreen::onRefresh() {
+	_carView.update();
 }
 
 } // End of namespace Gearhead

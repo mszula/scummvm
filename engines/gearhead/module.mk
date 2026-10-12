@@ -3,12 +3,17 @@ MODULE := engines/gearhead
 MODULE_OBJS = \
 	archive.o \
 	autoscript.o \
+	car.o \
+	cardata.o \
+	carview.o \
 	font.o \
 	gearhead.o \
 	gfx.o \
 	input.o \
+	jobs.o \
 	mechanic.o \
 	metaengine.o \
+	renderer3d.o \
 	resources.o \
 	screens.o \
 	signin.o \
