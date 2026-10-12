@@ -41,7 +41,7 @@ static bool rectContains(const Common::Rect &r, const Common::Point &p) {
 
 // ---------------------------------------------------------------- PartButton
 
-PartButton::PartButton() : _part(nullptr), _owner(nullptr), _selected(false) {
+PartButton::PartButton() : _part(nullptr), _def(nullptr), _owner(nullptr), _selected(false) {
 }
 
 void PartButton::onHover(const Common::Point &p) {
@@ -61,13 +61,21 @@ void PartButton::onRefresh() {
 }
 
 void PartButton::drawPart(Renderer3D &r3d) {
+	if (!_part)
+		return;
+	renderMesh(r3d, g_engine->_cars.find(_part->modelId, true), _part->def, _part->condition, 0.5f);
+}
+
+void PartButton::drawPartData(Renderer3D &r3d, const CarModel *model) {
+	if (_def)
+		renderMesh(r3d, model, _def, 3, 1.0f);
+}
+
+void PartButton::renderMesh(Renderer3D &r3d, const CarModel *model, const PartDef *pd, int condition, float aspectMul) {
 	// PartButton_renderMesh (0x439424)
-	if (!_part || _part->def->meshIndex < 0)
+	if (!model || !pd || pd->meshIndex < 0 || pd->meshIndex >= (int)model->_meshes.size() || !model->_meshes[pd->meshIndex])
 		return;
-	CarModel *model = g_engine->_cars.find(_part->modelId, true);
-	if (!model || _part->def->meshIndex >= (int)model->_meshes.size() || !model->_meshes[_part->def->meshIndex])
-		return;
-	const Mesh3D &mesh = *model->_meshes[_part->def->meshIndex];
+	const Mesh3D &mesh = *model->_meshes[pd->meshIndex];
 	float radius = 0.0f;
 	for (uint i = 0; i < mesh.vertices.size(); i++)
 		radius = MAX(radius, mesh.vertices[i].pos.length());
@@ -75,7 +83,7 @@ void PartButton::drawPart(Renderer3D &r3d) {
 		return;
 
 	r3d.setViewport(_rect);
-	r3d.setCamera(Mat4(), 2.4142137f, 0.1f, 3000.0f, 0.5f);
+	r3d.setCamera(Mat4(), 2.4142137f, 0.1f, 3000.0f, aspectMul);
 	r3d.setAmbient(Vec3(0.35f, 0.35f, 0.35f));
 	r3d.clearLights();
 	Light3D light;
@@ -94,22 +102,21 @@ void PartButton::drawPart(Renderer3D &r3d) {
 	Common::Array<Vec3> colours;
 	mats.resize(mesh.polys.size());
 	colours.resize(mesh.vertices.size());
-	const PartDef *pd = _part->def;
 	uint k = 0, j = 0;
 	for (uint c = 0; c < mesh.polys.size(); c++) {
 		const Material3D *m;
-		if (_part->condition == 3 && !pd->multiMaterials.empty()) {
+		if (condition == 3 && !pd->multiMaterials.empty()) {
 			const int mi = pd->multiMaterials[MIN<uint>(k, pd->multiMaterials.size() - 1)];
 			m = (mi >= 0 && mi < (int)model->_materials.size()) ? model->_materials[mi] : nullptr;
 			if (j < pd->switchPolys.size() && (int)c == pd->switchPolys[j] - 1) {
 				k++;
 				j++;
 			}
-		} else if (_part->condition == 3) {
+		} else if (condition == 3) {
 			const int fm = mesh.polys[c].fileMaterial;
 			m = (fm >= 0 && fm < (int)model->_materials.size()) ? model->_materials[fm] : conditionMaterial(3);
 		} else {
-			m = conditionMaterial(_part->condition);
+			m = conditionMaterial(condition);
 		}
 		mats[c] = m;
 		if (m)
@@ -121,7 +128,8 @@ void PartButton::drawPart(Renderer3D &r3d) {
 
 // ---------------------------------------------------------------- PartList
 
-PartList::PartList() : _onClick(nullptr), _onPress(nullptr), _hover(false), _showPageNumber(false), _cols(1), _rows(1), _page(0), _lastPage(0) {
+PartList::PartList() : _onClick(nullptr), _onPress(nullptr), _hover(false), _showPageNumber(false), _dataMode(false), _model(nullptr),
+	_cols(1), _rows(1), _page(0), _lastPage(0) {
 }
 
 PartList::~PartList() {
@@ -143,10 +151,14 @@ void PartList::onButtonClick(Button *b) {
 
 void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onClick, ButtonCallback *onPress) {
 	_rect = r;
-	delete _onPress;
-	_onPress = onPress;
-	delete _onClick;
-	_onClick = onClick;
+	if (onPress != _onPress) {
+		delete _onPress;
+		_onPress = onPress;
+	}
+	if (onClick != _onClick) {
+		delete _onClick;
+		_onClick = onClick;
+	}
 	_cols = cols;
 	_rows = rows;
 	const int cellW = (int)((double)(r.width() - (cols + 1) * gap) / cols);
@@ -159,7 +171,14 @@ void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, Bu
 		b->_tag = i;
 		b->setOnPress(makeCallback(this, &PartList::onButtonPress));
 		b->setOnClick(makeCallback(this, &PartList::onButtonClick));
-		_buttons.push_back(b);
+		// PartList_createButton: the new button takes slot i, one already there moves to the end
+		if (i < (int)_buttons.size()) {
+			PartButton *old = _buttons[i];
+			_buttons[i] = b;
+			_buttons.push_back(old);
+		} else {
+			_buttons.push_back(b);
+		}
 		addChild(b);
 		x += cellW + gap;
 		if ((r.width() - gap) - cellW <= x - r.left) {
@@ -169,8 +188,19 @@ void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, Bu
 	}
 }
 
+void PartList::layoutTwoPages(const Common::Rect &left, const Common::Rect &right, int cols, int rows, int gap,
+                              ButtonCallback *onClick, ButtonCallback *onPress) {
+	layoutGrid(right, cols, rows, gap, onClick, onPress);
+	layoutGrid(left, cols, rows, gap, onClick, onPress);
+	_rows *= 2;
+	_rect = Common::Rect(MIN(left.left, right.left), MIN(left.top, right.top), MAX(left.right, right.right),
+	                     MAX(left.bottom, right.bottom));
+	for (uint i = 0; i < _buttons.size(); i++)
+		_buttons[i]->_tag = i;
+}
+
 void PartList::refreshList() {
-	_lastPage = ((int)_items.size() - 1) / (_cols * _rows);
+	_lastPage = (itemCount() - 1) / (_cols * _rows);
 	if (_lastPage <= _page)
 		_page = _lastPage;
 	fillPage();
@@ -179,12 +209,18 @@ void PartList::refreshList() {
 void PartList::fillPage() {
 	if (_buttons.empty())
 		error("PartList with 0 PartButtons.");
-	for (uint i = 0; i < _buttons.size(); i++)
+	for (uint i = 0; i < _buttons.size(); i++) {
 		_buttons[i]->_part = nullptr;
+		_buttons[i]->_def = nullptr;
+	}
 	const int start = _page * _cols * _rows;
 	int n = 0;
-	for (int i = start; i < (int)_items.size() && n < _cols * _rows; i++)
-		_buttons[n++]->_part = _items[i];
+	for (int i = start; i < itemCount() && n < _cols * _rows && n < (int)_buttons.size(); i++) {
+		if (_dataMode)
+			_buttons[n++]->_def = _defs[i];
+		else
+			_buttons[n++]->_part = _items[i];
+	}
 	setListDirty(true);
 	if (_showPageNumber)
 		_pageNumber.draw(g_engine->_fonts[kFontTinyWhite], Common::String::format("%i", _page + 1),
@@ -244,9 +280,26 @@ void PartList::drawButtonFrame(const PartButton &b) {
 }
 
 void PartList::draw() {
-	// PartList_draw (0x43bc93), "Parts" mode: thumbnails on black, then corners and frames
 	Renderer3D *r3d = g_engine->_renderer3d;
 	Gfx *gfx = g_engine->_gfx;
+	if (_dataMode) {
+		// PartList_draw (0x43bc93), "PartData" mode: every cell its own viewport, cleared with the paper colour
+		for (uint i = 0; i < _buttons.size(); i++) {
+			PartButton &b = *_buttons[i];
+			if (r3d) {
+				r3d->beginFrame(b.rect(), _clearColour);
+				b.drawPartData(*r3d, _model);
+				r3d->endFrame(*gfx);
+			} else {
+				gfx->fill(kPageFront, b.rect(), gfx->rgb(_clearColour.x, _clearColour.y, _clearColour.z));
+			}
+			if (b._def)
+				g_engine->_fonts[kFontTinyBlack].drawText(*gfx, b._def->name, b.rect(), kAlignCenter, kAlignEnd, kKeyDefault,
+				                                          kPageFront);
+		}
+		return;
+	}
+	// "Parts" mode: thumbnails on black, then corners and frames
 	if (r3d) {
 		r3d->beginFrame(_rect, Vec3(0.0f, 0.0f, 0.0f));
 		for (uint i = 0; i < _buttons.size(); i++)

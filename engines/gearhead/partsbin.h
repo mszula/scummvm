@@ -27,10 +27,12 @@
 
 namespace Gearhead {
 
+class CarModel;
 class PartList;
 class Renderer3D;
 class Sound;
 struct Part;
+struct PartDef;
 
 /** One cell of a part list (PartButton, vt 0x4d0e1c): a spinning 3D thumbnail and the name */
 class PartButton : public Button {
@@ -44,14 +46,22 @@ public:
 
 	/** PartButton_drawPart (0x439362) */
 	void drawPart(Renderer3D &r3d);
+	/** PartButton_drawPartData (0x4393c8): the catalog's part, always perfect */
+	void drawPartData(Renderer3D &r3d, const CarModel *model);
+	/** PartButton_renderMesh (0x439424) */
+	void renderMesh(Renderer3D &r3d, const CarModel *model, const PartDef *pd, int condition, float aspectMul);
 
 	Part *_part;      ///< +0x48 (not owned)
+	const PartDef *_def; ///< +0x4c PartData mode
 	Mat4 _rotation;   ///< +0x50
 	PartList *_owner; ///< +0x90
 	bool _selected;   ///< +0x94
 };
 
-/** Paged grid of parts (PartList, vt 0x4d0e80, partlist.cpp), here only in "Parts" mode */
+/**
+ * Paged grid of parts (PartList, vt 0x4d0e80, partlist.cpp): installed/bin/yard
+ * parts ("Parts" mode) or the PartDatas of a model (the Catalog, "PartData" mode)
+ */
 class PartList : public Pane {
 public:
 	PartList();
@@ -59,8 +69,15 @@ public:
 
 	/** PartList_layoutGrid (0x43af91): cell callbacks cbA (click) and cbB (press) */
 	void layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onClick, ButtonCallback *onPress);
-	void clearItems() { _items.clear(); }
+	/** PartList_layoutTwoPages (0x43ae94): right page, then the left one (whose cells come first), rows doubled */
+	void layoutTwoPages(const Common::Rect &left, const Common::Rect &right, int cols, int rows, int gap, ButtonCallback *onClick,
+	                    ButtonCallback *onPress);
+	void clearItems() { _items.clear(); _defs.clear(); }
 	void addPart(Part *p) { _items.push_back(p); }
+	/** PartList_addPartData: PartData mode, the parts of @p model */
+	void addPartData(const CarModel *model, const PartDef *pd) { _model = model; _defs.push_back(pd); }
+	/** PartList_getPageFlags (0x43b576): bit 0 a next page, bit 1 a previous one */
+	int pageFlags() const { return (_page < _lastPage ? 1 : 0) | (_page > 0 ? 2 : 0); }
 	/** PartList_refresh (0x43b213) */
 	void refreshList();
 	/** PartList_fillPage (0x43b29f) */
@@ -86,6 +103,8 @@ public:
 	bool _hover;              ///< +0x90
 	bool _showPageNumber;     ///< +0x91
 	TextBox _pageNumber;      ///< +0x94
+	bool _dataMode;           ///< +0x70
+	Vec3 _clearColour;        ///< +0x71, the cells' background
 
 private:
 	void onButtonPress(Button *b);
@@ -93,8 +112,12 @@ private:
 	void drawConditionCorner(const PartButton &b);
 	void drawButtonFrame(const PartButton &b);
 
+	int itemCount() const { return _dataMode ? (int)_defs.size() : (int)_items.size(); }
+
 	Common::Array<PartButton *> _buttons;
 	Common::Array<Part *> _items;
+	Common::Array<const PartDef *> _defs;
+	const CarModel *_model;
 	int _cols, _rows, _page, _lastPage;
 };
 

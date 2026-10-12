@@ -194,6 +194,10 @@ Vec3 conditionColour(int condition);
 void decodeTextureBitmap(const TLVChunk &bm, Texture3D &tex);
 /** Texture_makePow2 (0x465030): RGBA pixels -> square power of two, at most 256 */
 void textureFromRGBA(int w, int h, const Common::Array<byte> &rgba, Texture3D &tex);
+/** BITMAP_* chunk -> RGBA pixels (formats 8, 0xb, 16, 24, 0x20) */
+bool decodeBitmapPixels(const TLVChunk &bm, int &w, int &h, Common::Array<byte> &rgba);
+/** Bitmap_resize (0x474890) of a true-colour bitmap */
+void resizeRGBA(int w, int h, const Common::Array<byte> &src, int dw, int dh, Common::Array<byte> &dst);
 
 /** TLV bitmap (TEX_BITMAP, JOBPHASEIMAGE, DD_IMAGE) converted to a 2D surface */
 Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics::PixelFormat &format);

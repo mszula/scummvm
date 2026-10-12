@@ -28,6 +28,7 @@
 
 #include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
+#include "gearhead/catalog.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -218,6 +219,9 @@ void AutoScript::execute(const Common::String &line) {
 		// Test helper: screen positions of the car's parts / the bolts / the bin cells
 		const Common::String what = tok.nextToken();
 		g_engine->_workShop->debugDump(what);
+	} else if (cmd == "dumpcatalog") {
+		if (g_engine->_catalog)
+			g_engine->_catalog->debugDump();
 	} else if (cmd == "dumpauction") {
 		if (g_engine->_auction)
 			g_engine->_auction->debugDump();

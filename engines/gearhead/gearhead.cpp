@@ -31,6 +31,7 @@
 #include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
 #include "gearhead/carlot.h"
+#include "gearhead/catalog.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -53,7 +54,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_gameDescription(gameDesc), _res(nullptr), _gfx(nullptr), _input(nullptr), _snd(nullptr), _jukebox(nullptr),
 	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _msgBox(nullptr), _jobEngine(nullptr),
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
-	_auction(nullptr), _carLot(nullptr), _junkYard(nullptr), _credits(nullptr),
+	_auction(nullptr), _carLot(nullptr), _catalog(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
 	_prevGameTime(0), _frameDelta(0.1f) {
 	g_engine = this;
@@ -64,6 +65,7 @@ GearheadEngine::~GearheadEngine() {
 	delete _signIn;
 	delete _auction;
 	delete _carLot;
+	delete _catalog;
 	delete _junkYard;
 	delete _workShop;
 	delete _credits;
@@ -251,13 +253,16 @@ void GearheadEngine::runStartup() {
 	progress(); // global materials
 	_cars.loadAll(*_res);
 	progress(); // Cars (headers; full models load on demand)
-	progress(); // Decals (not implemented yet)
+	_decals.loadAll(*_res);
+	progress(); // Decals
 	_jobs.loadAll(*_res, _rnd);
 	progress(); // Jobs
 
 	_workShop = new WorkShopScreen();
 	_workShop->init();
 	progress();
+	_catalog = new CatalogScreen();
+	_catalog->init();
 	progress(); // Catalog
 	_auction = new AuctionScreen();
 	_auction->init();

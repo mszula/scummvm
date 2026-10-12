@@ -69,8 +69,7 @@ static int pow2Floor(int v) {
 	return p;
 }
 
-/** BITMAP_* chunk -> RGBA pixels (formats 8, 0xb, 16, 24, 0x20) */
-static bool decodeBitmapPixels(const TLVChunk &bm, int &w, int &h, Common::Array<byte> &src) {
+bool decodeBitmapPixels(const TLVChunk &bm, int &w, int &h, Common::Array<byte> &src) {
 	w = bm.getInt(kTag_BITMAP_WIDTH);
 	h = bm.getInt(kTag_BITMAP_HEIGHT);
 	const int fmt = bm.getInt(kTag_BITMAP_FORMAT);
@@ -126,6 +125,29 @@ Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics
 			s->setPixel(x, y, format.RGBToColor(p[0], p[1], p[2]));
 		}
 	return s;
+}
+
+void resizeRGBA(int w, int h, const Common::Array<byte> &src, int dw, int dh, Common::Array<byte> &dst) {
+	// Bitmap_resize (0x474890) for true-colour bitmaps: 2x2 bilinear, 16.16 steps, 4-bit weights
+	dst.resize(dw * dh * 4);
+	if (w <= 0 || h <= 0)
+		return;
+	const uint32 stepX = ((uint32)w << 16) / dw, stepY = ((uint32)h << 16) / dh;
+	for (int y = 0; y < dh; y++) {
+		const uint32 sy = y * stepY;
+		const int y0 = MIN<int>(sy >> 16, h - 1), y1 = MIN(y0 + 1, h - 1);
+		const int fy = (sy >> 12) & 15;
+		for (int x = 0; x < dw; x++) {
+			const uint32 sx = x * stepX;
+			const int x0 = MIN<int>(sx >> 16, w - 1), x1 = MIN(x0 + 1, w - 1);
+			const int fx = (sx >> 12) & 15;
+			for (int c = 0; c < 4; c++) {
+				const int a = src[(y0 * w + x0) * 4 + c] * (16 - fx) + src[(y0 * w + x1) * 4 + c] * fx;
+				const int b = src[(y1 * w + x0) * 4 + c] * (16 - fx) + src[(y1 * w + x1) * 4 + c] * fx;
+				dst[(y * dw + x) * 4 + c] = (byte)((a * (16 - fy) + b * fy) >> 8);
+			}
+		}
+	}
 }
 
 void textureFromRGBA(int w, int h, const Common::Array<byte> &src, Texture3D &tex) {

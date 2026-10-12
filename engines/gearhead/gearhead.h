@@ -28,6 +28,7 @@
 #include "engines/engine.h"
 
 #include "gearhead/cardata.h"
+#include "gearhead/decals.h"
 #include "gearhead/detection.h"
 #include "gearhead/font.h"
 #include "gearhead/jobs.h"
@@ -56,6 +57,7 @@ namespace Gearhead {
 class AutoScript;
 class AuctionScreen;
 class CarLotScreen;
+class CatalogScreen;
 class CreditsScreen;
 class Gfx;
 class Input;
@@ -120,6 +122,7 @@ public:
 	BlitFont _fonts[kFontCount];
 	Renderer3D *_renderer3d;
 	CarList _cars;
+	DecalLibrary _decals;
 	JobList _jobs;
 	MsvcRandom _rnd;
 
@@ -134,6 +137,7 @@ public:
 	WorkShopScreen *_workShop;
 	AuctionScreen *_auction;
 	CarLotScreen *_carLot;
+	CatalogScreen *_catalog;
 	JunkYardScreen *_junkYard;
 	CreditsScreen *_credits;
 

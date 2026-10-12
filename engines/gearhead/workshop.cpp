@@ -25,6 +25,7 @@
 #include "gearhead/auction.h"
 #include "gearhead/car.h"
 #include "gearhead/carlot.h"
+#include "gearhead/catalog.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -223,7 +224,8 @@ void CarActionsPane::onAuctionCar(Button *b) {
 }
 
 void CarActionsPane::onCatalog(Button *b) {
-	notImplemented("The Catalog");
+	// CarActions_onCatalog (0x41008b)
+	g_engine->_catalog->activate();
 }
 
 // ---------------------------------------------------------------- NavPane

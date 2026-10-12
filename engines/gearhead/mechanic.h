@@ -26,6 +26,7 @@
 #include "common/str.h"
 
 #include "gearhead/car.h"
+#include "gearhead/decals.h"
 
 namespace Common {
 class SeekableReadStream;
@@ -87,8 +88,8 @@ struct PartsBank {
 
 /**
  * The player profile (Mechanic, mechanic.cpp, 0x394 bytes in the original).
- * Fields not yet reimplemented (lot cars, decals) are kept as their raw TLV
- * chunks so that loading and saving a profile is lossless.
+ * Loading and saving keep the original's chunk order, so a profile is
+ * written back byte for byte.
  */
 class Mechanic {
 public:
@@ -147,6 +148,8 @@ public:
 	void repairPart(Part *part);
 	/** Mechanic_sellPart (0x458f9e): scrap a bin part to the junkyard */
 	void sellPart(Part *part);
+	/** Mechanic_buyDecal (0x45955c): a pack of copies; owned decals stack */
+	void buyDecal(const DecalData *d);
 	/** Mechanic_updateCurrentCar (0x458ab7) */
 	void updateCurrentCar(int region);
 
@@ -183,6 +186,7 @@ public:
 	uint32 _clockTime;       ///< +0x18: game time of the last work-time update
 	uint32 _skillCheckTime;  ///< g_LastSkillCheck
 
+	Common::Array<OwnedDecal> _decals;  ///< +0x344 MECH_DECAL
 	Common::Array<PartsBank *> _banks;  ///< +0x380 (owned)
 	Common::Array<CarInstance *> _cars; ///< +0x360 the car lot (owned)
 	CarInstance *_car;   ///< +0x358 current car (a lot car or the job car; not owned)
@@ -197,7 +201,6 @@ private:
 	void seedBank(CarInstance *car, PartsBank *bank);
 
 	TLVChunk *_root;   ///< owns the raw chunks below
-	Common::Array<const TLVChunk *> _rawDecals;
 };
 
 /** What the sign-in roster shows of a profile (MechSummary 0x42d060, MechInfo_loadHeader 0x45a413) */

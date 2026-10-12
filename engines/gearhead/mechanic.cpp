@@ -136,7 +136,7 @@ void Mechanic::clear() {
 	for (uint i = 0; i < _cars.size(); i++)
 		delete _cars[i];
 	_cars.clear();
-	_rawDecals.clear();
+	_decals.clear();
 	delete _root;
 	_root = nullptr;
 }
@@ -213,9 +213,15 @@ bool Mechanic::load(Common::SeekableReadStream &stream) {
 			_cars.push_back(car);
 			break;
 		}
-		case kTag_MECH_DECAL:
-			_rawDecals.push_back(c);
+		case kTag_MECH_DECAL: {
+			// OwnedDecal_load (0x42d81b): OwnedDecal_init(id) gives numPerBuy copies, then DECAL_COPIES
+			OwnedDecal od;
+			od.id = c->getInt(kTag_DECAL_ID);
+			od.data = g_engine->_decals.find(od.id);
+			od.copies = c->find(kTag_DECAL_COPIES) ? c->getInt(kTag_DECAL_COPIES) : (od.data ? od.data->numPerBuy : 0);
+			_decals.push_back(od);
 			break;
+		}
 		case kTag_MECH_COMPLETEDJOBS: {
 			const Common::Array<int32> words = c->asIntArray();
 			for (uint w = 0; w < words.size() && w < kCompletedJobWords; w++)
@@ -262,8 +268,13 @@ bool Mechanic::save(Common::WriteStream &stream) const {
 		_banks[i]->save(w);
 	for (uint i = 0; i < _cars.size(); i++)
 		_cars[i]->save(w);
-	for (uint i = 0; i < _rawDecals.size(); i++)
-		w.writeChunk(*_rawDecals[i]);
+	for (uint i = 0; i < _decals.size(); i++) {
+		// OwnedDecal_save (0x42d8a8)
+		w.begin(kTag_MECH_DECAL);
+		w.writeInt(kTag_DECAL_ID, _decals[i].id);
+		w.writeInt(kTag_DECAL_COPIES, _decals[i].copies);
+		w.end();
+	}
 	w.begin(kTag_MECH_COMPLETEDJOBS);
 	for (int i = 0; i < kCompletedJobWords; i++)
 		w.appendInt(_completedJobs[i]);
@@ -522,6 +533,22 @@ void Mechanic::sellPart(Part *part) {
 		removeFrom(_bank->bin, part);
 		_bank->yard.push_back(part);
 	}
+}
+
+void Mechanic::buyDecal(const DecalData *d) {
+	if (!d || !pay((int)d->cost, true))
+		return;
+	for (uint i = 0; i < _decals.size(); i++) {
+		if (_decals[i].id == d->id) {
+			_decals[i].copies += d->numPerBuy;
+			return;
+		}
+	}
+	OwnedDecal od;
+	od.id = d->id;
+	od.data = g_engine->_decals.find(d->id);
+	od.copies = od.data ? od.data->numPerBuy : 0;
+	_decals.push_back(od);
 }
 
 void Mechanic::updateCurrentCar(int region) {
