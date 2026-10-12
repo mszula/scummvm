@@ -77,17 +77,27 @@ public:
 	/** Generate this frame's events and tick the root */
 	void dispatchFrame();
 
+	/**
+	 * Activating a screen sets the tick root, the mouse target and the key
+	 * target to it (g_Input +0x68, +4, +8).
+	 */
+	void activateScreen(Widget *w) { _root = w; _keyTarget = w; _capture = nullptr; }
+	/** The tick root (g_ModalHandler = g_Input+0x68): the active screen, or the open modal dialog */
 	void setRoot(Widget *w) { _root = w; }
 	Widget *root() const { return _root; }
+	/** Input_setMouseTarget (g_Input+4) for a pressed button; release = EventMgr_resetModal (back to the root) */
 	void setCapture(Widget *w) { _capture = w; }
 	void releaseCapture() { _capture = nullptr; }
 	Widget *capture() const { return _capture; }
+	Widget *mouseTarget() const { return _capture ? _capture : _root; }
 	void setKeyTarget(Widget *w) { _keyTarget = w; }
 	Widget *keyTarget() const { return _keyTarget; }
 	void setKeyHook(KeyHook *hook) { _hook = hook; }
 	KeyHook *keyHook() const { return _hook; }
 
 	const Common::Point &mouse() const { return _mouse; }
+	/** g_MousePrev: the position at the end of the previous frame */
+	const Common::Point &prevMouse() const { return _prevMouse; }
 	/** bit 0 = left, bit 1 = right */
 	uint buttons() const { return _buttons; }
 	bool isKeyDown(int scanCode) const { return scanCode >= 0 && scanCode < 256 && _keys[scanCode]; }
@@ -116,8 +126,7 @@ private:
 	uint _buttons, _prevButtons;
 	Common::Array<ButtonChange> _pending;
 	bool _keys[256];
-	Common::Array<int> _heldOrder;
-	Common::Array<int> _releasedThisFrame;
+	int _prevKeys[8];  ///< keys reported down last frame (g_Input+0x64)
 };
 
 } // End of namespace Gearhead

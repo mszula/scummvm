@@ -311,7 +311,8 @@ void TextBox::draw(const BlitFont &font, const Common::String &text, int hAlign,
 
 // ---------------------------------------------------------------- Dialog
 
-Dialog::Dialog() : _msgHAlign(kAlignCenter), _msgVAlign(kAlignCenter), _frame(nullptr), _msgFont(nullptr),
+Dialog::Dialog() : _msgHAlign(kAlignCenter), _msgVAlign(kAlignCenter), _takeFocus(false), _framePages(kPageBoth),
+	_openSound(true), _closeSound(true), _frame(nullptr), _msgFont(nullptr),
 	_titleFont(nullptr), _savedRoot(nullptr), _savedKeyTarget(nullptr), _isOpen(false) {
 	_saved[0] = _saved[1] = nullptr;
 	_msgFont = &g_engine->_fonts[kFontDialog];
@@ -343,10 +344,14 @@ void Dialog::setPos(int x, int y) {
 void Dialog::open() {
 	Input *input = g_engine->_input;
 	Gfx *gfx = g_engine->_gfx;
+	// Dialog_open (0x452cee): becomes the mouse target and the modal handler
+	// (= tick root, so the screen below stops ticking) and takes the key focus
 	_savedRoot = input->root();
 	_savedKeyTarget = input->keyTarget();
+	input->releaseCapture();
 	input->setRoot(this);
-	input->setKeyTarget(this);
+	if (_takeFocus)
+		input->setKeyTarget(nullptr);
 
 	for (int i = 0; i < 2; i++) {
 		delete _saved[i];
@@ -357,11 +362,20 @@ void Dialog::open() {
 		_saved[i]->simpleBlitFrom(page, r, Common::Point(0, 0));
 	}
 	if (_frame)
-		gfx->blit(kPageBoth, *_frame, _frameRect.left, _frameRect.top);
+		gfx->blit(_framePages, *_frame, _frameRect.left, _frameRect.top);
 	drawContents();
-	g_engine->_snd->play("dialog\\dialog8.wav");
+	if (_openSound)
+		g_engine->_snd->play("dialog\\dialog8.wav");
 	_isOpen = true;
 	refresh();
+}
+
+void Dialog::setButtons(const Common::Array<Widget *> &own, const Common::Array<Widget *> &extra) {
+	clearChildren();
+	for (uint i = 0; i < own.size(); i++)
+		addChild(own[i]);
+	for (uint i = 0; i < extra.size(); i++)
+		addChild(extra[i]);
 }
 
 void Dialog::drawContents() {
@@ -376,13 +390,15 @@ void Dialog::close() {
 		return;
 	Input *input = g_engine->_input;
 	input->setRoot(_savedRoot);
-	input->setKeyTarget(_savedKeyTarget);
+	if (_takeFocus)
+		input->setKeyTarget(_savedKeyTarget);
 	input->releaseCapture();
 	for (int i = 0; i < 2; i++) {
 		if (_saved[i])
 			g_engine->_gfx->blit(i ? kPageFront : kPageBack, *_saved[i], _frameRect.left, _frameRect.top);
 	}
-	g_engine->_snd->play("dialog\\dialog9.wav");
+	if (_closeSound)
+		g_engine->_snd->play("dialog\\dialog9.wav");
 	_isOpen = false;
 }
 
@@ -438,6 +454,19 @@ bool PreFabDialog::ask(const Common::String &title, const Common::String &messag
 	addChild(&_left);
 	addChild(&_right);
 	return run() == 1;
+}
+
+PreFabDialog *createMessageBox() {
+	// MsgBox_initOkCancel (0x40ed40)
+	PreFabDialog *d = new PreFabDialog();
+	d->setFonts(&g_engine->_fonts[kFontDialog], &g_engine->_fonts[kFontDialogTitle]);
+	d->setFrame("Overlays\\Dialog\\Frame.tga");
+	d->setPos(200, 135);
+	d->addButtonType("Overlays\\Dialog\\OkUP.tga", "Overlays\\Dialog\\OkDN.tga");
+	d->addButtonType("Overlays\\Dialog\\CancelUP.tga", "Overlays\\Dialog\\CancelDN.tga");
+	d->setButtonPositions(d->_anchorLeft, d->_anchorRight, d->_anchorCenter);
+	d->_takeFocus = true;
+	return d;
 }
 
 void PreFabDialog::message(const Common::String &title, const Common::String &message, int type) {

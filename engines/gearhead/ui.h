@@ -36,6 +36,12 @@ namespace Gearhead {
 class BlitFont;
 class Sound;
 
+/** Button image types of the standard message boxes (MsgBox_initOkCancel 0x40ed40) */
+enum DialogButtonType {
+	kDlgButtonOk = 0,
+	kDlgButtonCancel = 1
+};
+
 /** Event types of the original input layer (Input_update 0x45399a) */
 enum EventType {
 	kEvLHeld = 0x10001,
@@ -148,6 +154,8 @@ public:
 
 	virtual void setState(int state);
 	int state() const { return _state; }
+	/** Write the state field without redrawing (panes set states directly, then refresh) */
+	void setStateSilently(int state) { _state = state; }
 	uint32 radioMask() const { return _radioMask; }
 
 	void setOnClick(ButtonCallback *cb);
@@ -236,6 +244,16 @@ public:
 
 	virtual void open();
 	virtual void close();
+	/** Dialog_setButtons (0x452c5a): children = the dialog's own buttons + @p extra */
+	void setButtons(const Common::Array<Widget *> &own, const Common::Array<Widget *> &extra);
+	/** Take the keyboard focus while open (+0xb4); key events then go nowhere (text hooks still work) */
+	bool _takeFocus;
+	/** Pages the frame is pasted to (JobDialog_show: the visible page only) */
+	int _framePages;
+	/** +0xc0: dialog\\dialog8.wav on open (JobDialog_init clears it) */
+	bool _openSound;
+	/** +0xc4: dialog\\dialog9.wav on close (the Air Ratchet dialog has none) */
+	bool _closeSound;
 	bool isOpen() const { return _isOpen; }
 	const Common::Rect &frameRect() const { return _frameRect; }
 
@@ -283,6 +301,9 @@ private:
 	Common::Point _posLeft, _posRight, _posCenter;
 	int _result;
 };
+
+/** The game's standard message box (Mechanic+0x80): Frame.tga at (200,135), types OK / CANCEL */
+PreFabDialog *createMessageBox();
 
 } // End of namespace Gearhead
 

@@ -29,6 +29,7 @@
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
+#include "gearhead/workshop.h"
 
 namespace Gearhead {
 
@@ -131,8 +132,14 @@ void AutoScript::execute(const Common::String &line) {
 			f.a = 2;
 			_queue.push_back(f);
 		}
-	} else if (cmd == "down" || cmd == "up") {
-		a.type = cmd == "down" ? Action::kDown : Action::kUp;
+	} else if (cmd == "down" || cmd == "up" || cmd == "rdown" || cmd == "rup") {
+		a.type = cmd == "down" ? Action::kDown : cmd == "up" ? Action::kUp : cmd == "rdown" ? Action::kRDown : Action::kRUp;
+		_queue.push_back(a);
+	} else if (cmd == "keydown" || cmd == "keyup") {
+		int ascii;
+		a.a = namedKey(tok.nextToken(), ascii);
+		a.b = ascii;
+		a.type = cmd == "keydown" ? Action::kKeyDown : Action::kKeyUp;
 		_queue.push_back(a);
 	} else if (cmd == "key") {
 		int ascii;
@@ -149,6 +156,20 @@ void AutoScript::execute(const Common::String &line) {
 		path.trim();
 		if (!g_engine->_gfx->saveScreenshot(path))
 			warning("AutoScript: cannot write %s", path.c_str());
+	} else if (cmd == "clickpart" || cmd == "clickbolt") {
+		// Test helpers: click the installed part with PD_ID n / bolt n wherever it is on screen
+		const int n = atoi(tok.nextToken().c_str());
+		Common::Point p;
+		const bool ok = cmd == "clickpart" ? g_engine->_workShop->debugPartScreenPos(n, p)
+		                                   : g_engine->_workShop->_airRatchet.debugBoltScreenPos(n, p);
+		if (!ok)
+			warning("AutoScript: %s %d not found on screen", cmd.c_str(), n);
+		else
+			execute(Common::String::format("click %d %d", p.x, p.y));
+	} else if (cmd == "dump") {
+		// Test helper: screen positions of the car's parts / the bolts / the bin cells
+		const Common::String what = tok.nextToken();
+		g_engine->_workShop->debugDump(what);
 	} else if (cmd == "log") {
 		debug("AutoScript: %s", line.substr(4).c_str());
 	} else if (cmd == "quit") {
@@ -177,6 +198,12 @@ void AutoScript::update() {
 			break;
 		case Action::kUp:
 			input->injectButton(0, false);
+			break;
+		case Action::kRDown:
+			input->injectButton(1, true);
+			break;
+		case Action::kRUp:
+			input->injectButton(1, false);
 			break;
 		case Action::kKeyDown:
 			input->injectKey(a.a, a.b, true);

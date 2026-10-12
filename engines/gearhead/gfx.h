@@ -60,6 +60,8 @@ public:
 	void blitRect(int pages, const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y);
 	/** Colour-keyed copy: pixel value 0 (black in RGB565) is transparent */
 	void blitKeyed(int pages, const Graphics::ManagedSurface &src, const Common::Rect &srcRect, int x, int y);
+	/** Additive blend (screen sprites with blend ONE/ONE: black is transparent) */
+	void blitAdditive(int pages, const Graphics::ManagedSurface &src, int x, int y);
 	void fill(int pages, const Common::Rect &r, uint32 color);
 	void clear(int pages);
 	/** Copy a rect of the back page to the front page */

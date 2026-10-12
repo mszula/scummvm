@@ -19,10 +19,15 @@
  *
  */
 
+#include "common/debug.h"
 #include "common/stream.h"
 
+#include "gearhead/gearhead.h"
+#include "gearhead/gfx.h"
 #include "gearhead/mechanic.h"
+#include "gearhead/sound.h"
 #include "gearhead/tlv.h"
+#include "gearhead/ui.h"
 
 namespace Gearhead {
 
@@ -38,7 +43,102 @@ Common::String formatWorkTime(int seconds) {
 	return Common::String::format("%02i:%02i:%02i", h, m, s);
 }
 
-Mechanic::Mechanic() : _root(nullptr) {
+Common::String formatDuration(int seconds) {
+	const int h = seconds / 3600;
+	const int m = (seconds - 3600 * h) / 60;
+	const int s = seconds - 3600 * h - 60 * m;
+	Common::String r;
+	if (h != 0)
+		r += Common::String::format("%i", h) + (h < 2 ? " hour and " : " hours and ");
+	if (m != 0)
+		r += Common::String::format("%i", m) + (m < 2 ? " minute and " : " minutes and ");
+	r += Common::String::format("%i", s) + (s < 2 ? " second" : " seconds");
+	return r;
+}
+
+// ---------------------------------------------------------------- PartsBank
+
+PartsBank::~PartsBank() {
+	for (uint i = 0; i < yard.size(); i++)
+		delete yard[i];
+	for (uint i = 0; i < bin.size(); i++)
+		delete bin[i];
+}
+
+/** Part_load (0x438664): the condition defaults to 3 */
+static Part *loadPart(const TLVChunk &c) {
+	const int id = c.getInt(kTag_PART_ID, 0);
+	const int modelId = c.getInt(kTag_PART_AUTOID, 0);
+	CarModel *model = g_engine->_cars.find(modelId, true);
+	const PartDef *pd = model ? model->findPart(id) : nullptr;
+	if (!pd) {
+		warning("Tried to find non existent PartData %d of car %d", id, modelId);
+		return nullptr;
+	}
+	Part *p = new Part();
+	p->def = pd;
+	p->modelId = modelId;
+	const int cond = c.getInt(kTag_PART_CONDITION, 3);
+	p->condition = (pd->special == 4) ? 3 : cond;
+	p->wiggle = c.getFloat(kTag_PART_VALUEWIGGLE, 0.0f);
+	return p;
+}
+
+/** Part_save (0x438753) */
+static void savePart(TLVWriter &w, uint tag, const Part &p) {
+	w.begin(tag);
+	w.writeInt(kTag_PART_ID, p.def->id);
+	w.writeInt(kTag_PART_AUTOID, p.modelId);
+	w.writeInt(kTag_PART_CONDITION, p.condition);
+	w.writeFloat(kTag_PART_VALUEWIGGLE, p.wiggle);
+	w.end();
+}
+
+bool PartsBank::load(const TLVChunk &c) {
+	// PartsBank_load (0x438bb2)
+	for (uint i = 0; i < c.children().size(); i++) {
+		const TLVChunk *ch = c.children()[i];
+		switch (ch->id()) {
+		case kTag_PBANK_AUTOID:
+			modelId = ch->asInt();
+			break;
+		case kTag_PBANK_INBINPART:
+		case kTag_PBANK_INYARDPART: {
+			Part *p = loadPart(*ch);
+			if (p)
+				(ch->id() == kTag_PBANK_INBINPART ? bin : yard).push_back(p);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+	return true;
+}
+
+void PartsBank::save(TLVWriter &w) const {
+	// PartsBank_save (0x438d1d)
+	w.begin(kTag_MECH_PARTSBANK);
+	w.writeInt(kTag_PBANK_AUTOID, modelId);
+	for (uint i = 0; i < bin.size(); i++)
+		savePart(w, kTag_PBANK_INBINPART, *bin[i]);
+	for (uint i = 0; i < yard.size(); i++)
+		savePart(w, kTag_PBANK_INYARDPART, *yard[i]);
+	w.end();
+}
+
+static void removeFrom(Common::Array<Part *> &list, Part *p) {
+	for (uint i = 0; i < list.size(); i++) {
+		if (list[i] == p) {
+			list.remove_at(i);
+			return;
+		}
+	}
+}
+
+// ---------------------------------------------------------------- Mechanic
+
+Mechanic::Mechanic() : _root(nullptr), _car(nullptr), _job(nullptr), _bank(nullptr) {
 	init("Mechanic", 0, 0.0f, 0);
 }
 
@@ -47,7 +147,10 @@ Mechanic::~Mechanic() {
 }
 
 void Mechanic::clear() {
-	_rawBanks.clear();
+	for (uint i = 0; i < _banks.size(); i++)
+		delete _banks[i];
+	_banks.clear();
+	_bank = nullptr;
 	_rawAutos.clear();
 	_rawDecals.clear();
 	delete _root;
@@ -63,11 +166,13 @@ void Mechanic::init(const Common::String &name, int id, float cash, int skillInd
 	_totalCareerAutos = 0;
 	_totalWorkTime = 0;
 	_lastAutoNum = -1;
-	_jobActive = false;
 	for (int i = 0; i < kCompletedJobWords; i++)
 		_completedJobs[i] = 0;
 	_autoJobRequest = true;
-	_signInTime = 0;
+	_clockTime = 0;
+	_skillCheckTime = 0;
+	_car = nullptr;
+	_job = nullptr;
 }
 
 bool Mechanic::load(Common::SeekableReadStream &stream) {
@@ -106,9 +211,12 @@ bool Mechanic::load(Common::SeekableReadStream &stream) {
 		case kTag_MECH_LASTAUTONUM:
 			_lastAutoNum = c->asInt();
 			break;
-		case kTag_MECH_PARTSBANK:
-			_rawBanks.push_back(c);
+		case kTag_MECH_PARTSBANK: {
+			PartsBank *b = new PartsBank();
+			b->load(*c);
+			_banks.push_back(b);
 			break;
+		}
 		case kTag_MECH_AUTO:
 			_rawAutos.push_back(c);
 			break;
@@ -145,10 +253,10 @@ bool Mechanic::save(Common::WriteStream &stream) const {
 	w.writeInt(kTag_MECH_TOTALCAREERAUTOS, _totalCareerAutos);
 	w.writeInt(kTag_MECH_TOTALWORKTIME, _totalWorkTime);
 	// Only written with a current car and no active job
-	if (_lastAutoNum >= 0 && !_jobActive)
+	if (_lastAutoNum >= 0 && !_job)
 		w.writeInt(kTag_MECH_LASTAUTONUM, _lastAutoNum);
-	for (uint i = 0; i < _rawBanks.size(); i++)
-		w.writeChunk(*_rawBanks[i]);
+	for (uint i = 0; i < _banks.size(); i++)
+		_banks[i]->save(w);
 	for (uint i = 0; i < _rawAutos.size(); i++)
 		w.writeChunk(*_rawAutos[i]);
 	for (uint i = 0; i < _rawDecals.size(); i++)
@@ -161,6 +269,298 @@ bool Mechanic::save(Common::WriteStream &stream) const {
 	w.end();
 	return w.close(stream);
 }
+
+void Mechanic::saveToDisk() const {
+	Common::WriteStream *ws = g_engine->createMechanic(_id);
+	if (!ws)
+		return;
+	save(*ws);
+	ws->finalize();
+	delete ws;
+}
+
+void Mechanic::saveIfReal() const {
+	if (_id < kMechanicIdCarDev && !_job)
+		saveToDisk();
+}
+
+bool Mechanic::reloadFromDisk() {
+	debugC(1, kDebugGame, "Loading Mechanic from Disk: %d", _id);
+	const int id = _id;
+	const uint32 clock = _clockTime, skill = _skillCheckTime;
+	Common::SeekableReadStream *s = g_engine->openMechanic(id);
+	bool ok = s && load(*s);
+	delete s;
+	if (!ok)
+		init(_name, id, _cash, _skillIndex);
+	_clockTime = clock;
+	_skillCheckTime = skill;
+	return ok;
+}
+
+// ---------------------------------------------------------------- money
+
+bool Mechanic::pay(int amount, bool sound) {
+	if (!canAfford(amount)) {
+		msgNoCash();
+		return false;
+	}
+	_cash -= (float)amount;
+	addRepairCost(amount);
+	drawCash();
+	if (sound)
+		g_engine->_snd->play("misc\\cashreg.wav");
+	return true;
+}
+
+void Mechanic::addRepairCost(int amount) {
+	if (_car && !_car->_isTop)
+		_car->_repairCost = (float)amount + _car->_repairCost;
+}
+
+void Mechanic::drawName() const {
+	// Mechanic_drawName (0x459258)
+	g_engine->_fonts[kFontStandard].drawText(*g_engine->_gfx, _name, Common::Rect(335, 15, 454, 33),
+	                                          kAlignCenter, kAlignCenter, kKeyDefault, kPageBoth);
+}
+
+void Mechanic::drawCash() const {
+	TextBox cash;
+	cash.setRect(Common::Rect(515, 49, 635, 82));
+	cash.draw(g_engine->_fonts[kFontCash], "$" + Common::String::format("%4.2f", _cash),
+	          kAlignEnd, kAlignCenter, kKeyDefault, kPageFront);
+}
+
+// ---------------------------------------------------------------- parts
+
+void Mechanic::ensureBank(CarInstance *car) {
+	const int modelId = car->model()->_id;
+	for (uint i = 0; i < _banks.size(); i++) {
+		if (_banks[i]->modelId == modelId) {
+			_bank = _banks[i];
+			return;
+		}
+	}
+	PartsBank *b = new PartsBank();
+	b->modelId = modelId;
+	_banks.push_back(b);
+	_bank = b;
+	seedBank(car, b);
+}
+
+void Mechanic::seedBank(CarInstance *car, PartsBank *bank) {
+	// Mechanic_seedBank (0x458c25): the junkyard gets every part the car is
+	// missing, then 0..7 random extra parts, all in random condition
+	MsvcRandom &rnd = g_engine->_rnd;
+	const CarModel *model = car->model();
+	const Common::Array<PartDef *> &defs = model->_parts;
+	for (uint i = 0; i < defs.size(); i++) {
+		if (car->findPart(defs[i]->id) || defs[i]->special == 4)
+			continue;
+		const int cond = (int)rnd.frand(3.999f);
+		bank->yard.push_back(createPart(model, defs[i], cond, rnd));
+	}
+	const int extra = (int)rnd.frand(7.0f);
+	for (int i = 0; i < extra && !defs.empty(); i++) {
+		// Rand_float includes its upper bound: index == count reads past the
+		// end of the list in the original (1 in 32768); clamped here
+		const int idx = MIN<int>((int)rnd.frand((float)defs.size()), defs.size() - 1);
+		if (defs[idx]->special == 4)
+			continue;
+		const int cond = (int)rnd.frand(3.999f);
+		bank->yard.push_back(createPart(model, defs[idx], cond, rnd));
+	}
+}
+
+bool Mechanic::removePart(Part *part) {
+	AssemblyError err;
+	if (!_car || !_bank || !_car->canRemove(part, err))
+		return false;
+	g_engine->_snd->play("rattle\\rattle12.wav");
+	removeFrom(_car->_parts, part);
+	_bank->bin.push_back(part);
+	return true;
+}
+
+bool Mechanic::attachPart(Part *part) {
+	AssemblyError err;
+	if (!_car || !_bank || !_car->canInstall(part, err))
+		return false;
+	removeFrom(_bank->bin, part);
+	_car->_parts.push_back(part);
+	return true;
+}
+
+void Mechanic::repairPart(Part *part) {
+	if (part->condition == 0)
+		return;
+	Sound *s = g_engine->_snd->get("misc\\repair.wav");
+	s->play();
+	while (s->isPlaying() && g_engine->pollOnly()) {
+	}
+	part->condition = 3;
+}
+
+void Mechanic::sellPart(Part *part) {
+	_cash = part->junkPrice() + _cash;
+	// Original bug: the money received is added to the car's repair cost
+	if (!g_engine->fixOriginalBugs())
+		addRepairCost((int)part->junkPrice());
+	Sound *s = g_engine->_snd->get("misc\\toilet2.wav");
+	s->play();
+	while (s->isPlaying() && g_engine->pollOnly()) {
+	}
+	drawCash();
+	if (_bank) {
+		removeFrom(_bank->bin, part);
+		_bank->yard.push_back(part);
+	}
+}
+
+void Mechanic::updateCurrentCar(int region) {
+	// Auto_showForWorkshop (0x43dfc3)
+	if (_car)
+		_car->showRegion(region, true);
+}
+
+// ---------------------------------------------------------------- messages
+
+void Mechanic::msgNoCash() {
+	g_engine->_msgBox->message("* Bummer *", "You don't have the cash!", kDlgButtonOk);
+}
+
+void Mechanic::msgCarLotFull() {
+	g_engine->_msgBox->message("* Car Lot Full *", "Your Car Lot is full. Auction some of your cars to make room.", kDlgButtonOk);
+}
+
+void Mechanic::msgAssemblyError(const AssemblyError &err) {
+	// Mechanic_msgAssemblyError (0x4598e1): only the first listed part is named
+	if (!_car || err.ids.empty())
+		return;
+	const PartDef *pd = _car->model()->findPart(err.ids[0]);
+	const Common::String name = pd ? pd->name : Common::String();
+	const bool plural = !name.empty() && (name.lastChar() == 's' || name.lastChar() == 'S');
+	const char *verb = plural ? " are " : " is ";
+	Common::String text;
+	switch (err.code) {
+	case AssemblyError::kAlreadyInstalled:
+		if (!plural) {
+			text = "There's already a";
+			const char c = name.empty() ? 0 : name[0];
+			if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u')
+				text += "n";
+			text += " " + name + " on the car. Remove that first.";
+		} else {
+			text = "There's already some " + name + " on the car. Remove those first.";
+		}
+		break;
+	case AssemblyError::kMissingDeps:
+		text = "You can't attach that part until the " + name + verb + "attached.";
+		break;
+	case AssemblyError::kBlocked:
+		text = "You can't remove that part until the " + name + verb + "taken off.";
+		break;
+	case AssemblyError::kBroken:
+		text = "That part's too messed up. It won't last ten minutes. You'll have to scrap it.";
+		break;
+	case AssemblyError::kReplaces:
+		text = "That part replaces the " + name + ", which" + verb + "already attached.";
+		break;
+	default:
+		break;
+	}
+	g_engine->_msgBox->message("Assembly Error!", text, kDlgButtonOk);
+}
+
+void Mechanic::msgCarComplete() {
+	if (!_car || _id >= kMechanicIdCarDev || _job)
+		return;
+	g_engine->_jukebox->playJingle();
+	const Common::String text = "Congratulations! You've fixed this baby up to Top Condition. And it only took you " +
+	                            formatDuration(_car->_repairTimeMs / 1000) + ". You spent a total of $" +
+	                            Common::String::format("%4.2f", _car->_repairCost) + ".";
+	g_engine->_msgBox->message("Car Complete", text, kDlgButtonOk);
+}
+
+// ---------------------------------------------------------------- clock and skill
+
+void Mechanic::update() {
+	const uint32 now = g_engine->gameTimeMs();
+	if (_clockTime + 1000 < now) {
+		// The fraction is dropped every update, so the clock runs a little slow
+		_totalWorkTime = (int)(_totalWorkTime + (now - _clockTime) / 1000.0);
+		_clockTime = now;
+	}
+	// Mechanic_tickSkillAndTime (0x45939f)
+	if (_skillCheckTime + 2000 < now) {
+		_skillCheckTime = now;
+		checkSkill();
+	}
+	if (_car && !_car->_isTop)
+		_car->_repairTimeMs += now - g_engine->prevGameTimeMs();
+}
+
+void Mechanic::checkSkill() {
+	const int n = countCompletedJobs();
+	if (n == 9)
+		advanceSkill(1);
+	if (n == 20)
+		advanceSkill(2);
+	if (_cash >= 15000.0f)
+		advanceSkill(2);
+	if (numCars() > 4)
+		advanceSkill(2);
+	if (_cash >= 35000.0f)
+		advanceSkill(3);
+	if (numCars() > 10)
+		advanceSkill(3);
+	if (_cash >= 120000.0f)
+		advanceSkill(4);
+}
+
+void Mechanic::advanceSkill(int level) {
+	if (level <= _skillIndex || level > _skillIndex + 1)
+		return;
+	const Common::String oldName = skillName(_skillIndex);
+	_skillIndex = MIN(_skillIndex + 1, 4);
+	g_engine->_msgBox->message("Skill Advance", "Congratulations! You just moved up from " + oldName +
+	                           " skill to the " + skillName(_skillIndex) + " skill level!", kDlgButtonOk);
+	if (_skillIndex != 1)
+		g_engine->_msgBox->message("Available Cars", "You'll have access to more cars in the Auction, and there may be new jobs to complete.", kDlgButtonOk);
+}
+
+bool Mechanic::isJobCompleted(int jobId) const {
+	if (jobId < 0 || jobId >= kCompletedJobWords * 32)
+		return false;
+	return (_completedJobs[jobId / 32] >> (jobId % 32)) & 1;
+}
+
+void Mechanic::setJobCompleted(int jobId) {
+	if (jobId >= 0 && jobId < kCompletedJobWords * 32)
+		_completedJobs[jobId / 32] |= (int32)(1u << (jobId % 32));
+	if (!_autoJobRequest)
+		return;
+	const int n = countCompletedJobs();
+	if (n == 1) {
+		g_engine->_msgBox->message("Congratulations", "Way to go. You've just completed your first job as a Virtual Mechanic.", kDlgButtonOk);
+		g_engine->_msgBox->message("The Future", "With any luck, more jobs will roll in until you can afford to buy your own cars.", kDlgButtonOk);
+	}
+	if (n > 8)
+		_autoJobRequest = false;
+}
+
+int Mechanic::countCompletedJobs() const {
+	// Original quirk: only bits 0..15 of every word are counted
+	const int bits = g_engine->fixOriginalBugs() ? 32 : 16;
+	int n = 0;
+	for (int w = 0; w < kCompletedJobWords; w++)
+		for (int b = 0; b < bits; b++)
+			if ((_completedJobs[w] >> b) & 1)
+				n++;
+	return n;
+}
+
+// ---------------------------------------------------------------- MechSummary
 
 bool MechSummary::load(Common::SeekableReadStream &stream) {
 	TLVChunk *root = TLVReader::parseFile(stream, kTag_MECHANICFILE);

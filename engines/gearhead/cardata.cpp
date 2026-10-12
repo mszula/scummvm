@@ -28,6 +28,7 @@
 #include "gearhead/cardata.h"
 #include "gearhead/detection.h"
 #include "gearhead/resources.h"
+#include "gearhead/sound.h"
 #include "gearhead/tlv.h"
 
 namespace Gearhead {
@@ -68,21 +69,19 @@ static int pow2Floor(int v) {
 	return p;
 }
 
-/** TEX_BITMAP -> square power-of-two RGBA (bilinear resample when needed) */
-static void decodeBitmap(const TLVChunk &bm, Texture3D &tex) {
-	const int w = bm.getInt(kTag_BITMAP_WIDTH);
-	const int h = bm.getInt(kTag_BITMAP_HEIGHT);
+/** BITMAP_* chunk -> RGBA pixels (formats 8, 0xb, 16, 24, 0x20) */
+static bool decodeBitmapPixels(const TLVChunk &bm, int &w, int &h, Common::Array<byte> &src) {
+	w = bm.getInt(kTag_BITMAP_WIDTH);
+	h = bm.getInt(kTag_BITMAP_HEIGHT);
 	const int fmt = bm.getInt(kTag_BITMAP_FORMAT);
 	const TLVChunk *dataChunk = bm.find(kTag_BITMAP_DATA);
 	const TLVChunk *palChunk = bm.find(kTag_BITMAP_PALETTE);
-	if (w <= 0 || h <= 0 || !dataChunk) {
-		tex.create(1);
-		return;
-	}
+	if (w <= 0 || h <= 0 || !dataChunk)
+		return false;
 	const byte *data = dataChunk->data().data();
 	const uint32 dataSize = dataChunk->data().size();
 
-	Common::Array<byte> src(w * h * 4);
+	src.resize(w * h * 4);
 	for (int i = 0; i < w * h; i++) {
 		byte r = 0, g = 0, b = 0;
 		if (fmt == 16 && (uint32)i * 2 + 1 < dataSize) {
@@ -111,6 +110,31 @@ static void decodeBitmap(const TLVChunk &bm, Texture3D &tex) {
 		src[i * 4 + 1] = g;
 		src[i * 4 + 2] = b;
 		src[i * 4 + 3] = 255;
+	}
+	return true;
+}
+
+Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics::PixelFormat &format) {
+	int w, h;
+	Common::Array<byte> src;
+	if (!decodeBitmapPixels(bm, w, h, src))
+		return nullptr;
+	Graphics::ManagedSurface *s = new Graphics::ManagedSurface(w, h, format);
+	for (int y = 0; y < h; y++)
+		for (int x = 0; x < w; x++) {
+			const byte *p = &src[(y * w + x) * 4];
+			s->setPixel(x, y, format.RGBToColor(p[0], p[1], p[2]));
+		}
+	return s;
+}
+
+/** TEX_BITMAP -> square power-of-two RGBA (bilinear resample when needed) */
+static void decodeBitmap(const TLVChunk &bm, Texture3D &tex) {
+	int w, h;
+	Common::Array<byte> src;
+	if (!decodeBitmapPixels(bm, w, h, src)) {
+		tex.create(1);
+		return;
 	}
 
 	const int size = MIN<int>(MAX(pow2Floor(w), pow2Floor(h)), kMaxTextureSize);
@@ -175,6 +199,9 @@ void CarModel::clear() {
 		delete _specMeshes[i];
 	for (uint i = 0; i < _parts.size(); i++)
 		delete _parts[i];
+	for (uint i = 0; i < _ignitionSounds.size(); i++)
+		delete _ignitionSounds[i].sound;
+	_ignitionSounds.clear();
 	_textures.clear();
 	_materials.clear();
 	_meshes.clear();
@@ -361,8 +388,23 @@ bool CarModel::load(Resources &res) {
 			list[m->index] = m;
 			break;
 		}
+		case kTag_CD_SOUND_IGNITION: {
+			// AutoData_readIgnitionSound (0x44052c): IS_WAVFILE holds the WAV data itself
+			IgnitionSound is;
+			is.partId = c.getInt(kTag_IS_PARTID, -1);
+			const TLVChunk *wav = c.find(kTag_IS_WAVFILE);
+			if (wav && !wav->data().empty()) {
+				is.sound = new Sound();
+				if (!is.sound->load(wav->data().data(), wav->data().size())) {
+					delete is.sound;
+					is.sound = nullptr;
+				}
+			}
+			_ignitionSounds.push_back(is);
+			break;
+		}
 		default:
-			// CD_SOUND_* are handled elsewhere; NOSTARTER / FALSESTART are never read
+			// CD_SOUND_NOSTARTER / FALSESTART are never read by the original
 			break;
 		}
 	}
@@ -460,6 +502,34 @@ const Material3D *conditionMaterial(int condition) {
 			mats[i].shadeColor = 2;
 			mats[i].flags = Material3D::kFlagTwoSided;
 			mats[i].color = Vec3(kTint[i][0] / 255.0f, kTint[i][1] / 255.0f, kTint[i][2] / 255.0f);
+			mats[i].name = conditionName(i);
+		}
+		init = true;
+	}
+	return &mats[CLIP(condition, 0, 3)];
+}
+
+// CondLevels_initColors (0x44f998), 16-bit (D3D) status colours
+static const float kStatusColour[4][3] = { { 0.25f, 0.25f, 0.25f }, { 0.75f, 0.05f, 0.05f }, { 0.75f, 0.75f, 0.05f }, { 0.05f, 0.5f, 0.05f } };
+
+Vec3 conditionColour(int condition) {
+	const float *c = kStatusColour[CLIP(condition, 0, 3)];
+	return Vec3(c[0], c[1], c[2]);
+}
+
+const Material3D *conditionHighlight(int condition) {
+	static Material3D mats[4];
+	static bool init = false;
+	if (!init) {
+		// CondLevel_ctor (0x44f810): additive, vertex alpha, Gouraud, two-sided
+		for (int i = 0; i < 4; i++) {
+			mats[i].blendSrc = 1;
+			mats[i].blendDst = 1;
+			mats[i].shadeAlpha = 2;
+			mats[i].shadeColor = 2;
+			mats[i].updateTranslucency();
+			mats[i].flags |= Material3D::kFlagTwoSided;
+			mats[i].color = conditionColour(i);
 			mats[i].name = conditionName(i);
 		}
 		init = true;

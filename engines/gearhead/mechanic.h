@@ -25,6 +25,8 @@
 #include "common/array.h"
 #include "common/str.h"
 
+#include "gearhead/car.h"
+
 namespace Common {
 class SeekableReadStream;
 class WriteStream;
@@ -33,24 +35,43 @@ class WriteStream;
 namespace Gearhead {
 
 class TLVChunk;
+class TLVWriter;
+struct Job;
 
 enum {
 	kNumMechanicSlots = 10,
 	kMechanicIdCarDev = 666,
 	kMechanicIdJobDev = 667,
-	kCompletedJobWords = 64
+	kCompletedJobWords = 64,
+	kMaxLotCars = 12
 };
 
 /** SkillLevel table (g_SkillTable 0x4e664c): the display clamps the index */
 const char *skillName(int index);
 
-/** Seconds as "HH:MM:SS" (0x450843) */
+/** Seconds as "HH:MM:SS" (FormatDuration 0x450843, compact) */
 Common::String formatWorkTime(int seconds);
+/** Seconds as "1 hour and 2 minutes and 3 seconds" (FormatDuration, long form) */
+Common::String formatDuration(int seconds);
+
+/**
+ * The parts of one car model the player owns (PartsBank, 0x30 bytes): the
+ * parts bin shown in the workshop and the junkyard stock.
+ */
+struct PartsBank {
+	int modelId = 0;
+	Common::Array<Part *> yard; ///< +0x08, PBANK_INYARDPART
+	Common::Array<Part *> bin;  ///< +0x1c, PBANK_INBINPART
+
+	~PartsBank();
+	bool load(const TLVChunk &c);
+	void save(TLVWriter &w) const;
+};
 
 /**
  * The player profile (Mechanic, mechanic.cpp, 0x394 bytes in the original).
- * Fields not yet reimplemented (cars, parts banks, decals) are kept as their
- * raw TLV chunks so that loading and saving a profile is lossless.
+ * Fields not yet reimplemented (lot cars, decals) are kept as their raw TLV
+ * chunks so that loading and saving a profile is lossless.
  */
 class Mechanic {
 public:
@@ -64,6 +85,58 @@ public:
 	bool load(Common::SeekableReadStream &stream);
 	/** Mechanic_saveToDisk (0x4584bb) + Mechanic_writeBody (0x4581db), same chunk order */
 	bool save(Common::WriteStream &stream) const;
+	/** Mechanic_save: write Mechanics\<id>.mek */
+	void saveToDisk() const;
+	/** Mechanic_saveIfReal (0x4588d2): not for dev mechanics or while a job runs */
+	void saveIfReal() const;
+	/** Mechanic_load (0x45861e): re-read Mechanics\<id>.mek (a job is abandoned) */
+	bool reloadFromDisk();
+
+	// Money
+	/** Mechanic_canAfford (0x458e82) */
+	bool canAfford(int amount) const { return _cash >= (float)amount; }
+	/** Mechanic_pay (0x458ead): "You don't have the cash!" if short */
+	bool pay(int amount, bool sound);
+	/** Mechanic_addRepairCost (0x459418) */
+	void addRepairCost(int amount);
+	void drawName() const;
+	/** Mechanic_drawCash (0x4592e5) */
+	void drawCash() const;
+
+	// Parts
+	/** Mechanic_ensureBank (0x458b38): the bank of the car's model, created and filled once */
+	void ensureBank(CarInstance *car);
+	/** Mechanic_removePart (0x459050): car -> parts bin */
+	bool removePart(Part *part);
+	/** Mechanic_attachPart (0x4590bd): parts bin -> car */
+	bool attachPart(Part *part);
+	/** Mechanic_repairPart (0x45911c): blocks while misc\repair.wav plays */
+	void repairPart(Part *part);
+	/** Mechanic_sellPart (0x458f9e): scrap a bin part to the junkyard */
+	void sellPart(Part *part);
+	/** Mechanic_updateCurrentCar (0x458ab7) */
+	void updateCurrentCar(int region);
+
+	// Messages (the standard message box, Mechanic+0x80)
+	void msgNoCash();
+	void msgCarLotFull();
+	void msgAssemblyError(const AssemblyError &err);
+	void msgCarComplete();
+
+	// Clock and skill
+	/** Mechanic_update (0x45946a) + Mechanic_tickSkillAndTime (0x45939f) */
+	void update();
+	/** Mechanic_checkSkill (0x45a0ac) */
+	void checkSkill();
+	/** Mechanic_advanceSkill (0x45a175) */
+	void advanceSkill(int level);
+
+	// Jobs
+	bool isJobCompleted(int jobId) const;
+	/** Mechanic_setJobCompleted (0x459c3a) */
+	void setJobCompleted(int jobId);
+	/** Mechanic_countCompletedJobs (0x459da4) */
+	int countCompletedJobs() const;
 
 	Common::String _name;
 	int _id;
@@ -72,19 +145,24 @@ public:
 	int _totalCareerAutos;
 	int _totalWorkTime;      ///< seconds
 	int _lastAutoNum;        ///< careerNum of the current car, -1 = none
-	bool _jobActive;
 	int32 _completedJobs[kCompletedJobWords];
 	bool _autoJobRequest;
-	uint32 _signInTime;      ///< game time when the work-time clock started
+	uint32 _clockTime;       ///< +0x18: game time of the last work-time update
+	uint32 _skillCheckTime;  ///< g_LastSkillCheck
+
+	Common::Array<PartsBank *> _banks;  ///< +0x380 (owned)
+	CarInstance *_car;   ///< +0x358 current car (not owned)
+	Job *_job;           ///< +0x374 current job
+	PartsBank *_bank;    ///< +0x37c parts bank of the current car's model
 
 	int numCars() const { return _rawAutos.size(); }
 	bool isDev() const { return _id >= kMechanicIdCarDev; }
 
 private:
 	void clear();
+	void seedBank(CarInstance *car, PartsBank *bank);
 
 	TLVChunk *_root;   ///< owns the raw chunks below
-	Common::Array<const TLVChunk *> _rawBanks;
 	Common::Array<const TLVChunk *> _rawAutos;
 	Common::Array<const TLVChunk *> _rawDecals;
 };

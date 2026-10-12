@@ -62,8 +62,13 @@ public:
 	bool init(const Graphics::PixelFormat &format);
 
 	void beginFrame(const Common::Rect &viewport, const Vec3 &clearColour);
-	/** Camera world matrix (rows right, up, forward, position); zoom = cot(fovY / 2) */
-	void setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ);
+	/** Device_setViewport without clearing (part list cells) */
+	void setViewport(const Common::Rect &viewport);
+	/**
+	 * Camera world matrix (rows right, up, forward, position); zoom = cot(fovY / 2).
+	 * SetPerspective uses aspect = (viewport w / h) * aspectMul.
+	 */
+	void setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ, float aspectMul = 1.0f);
 	void setAmbient(const Vec3 &ambient) { _ambient = ambient; }
 	void clearLights() { _lights.clear(); }
 	void addLight(const Light3D &light) { _lights.push_back(light); }
@@ -74,6 +79,14 @@ public:
 	 */
 	void drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::Array<const Material3D *> &materials,
 	              const Common::Array<Vec3> *vertexColours = nullptr);
+	/**
+	 * SpriteGroup render (0x46b240) + Billboard_draw (0x46ab60): a screen-aligned
+	 * quad around the projected @p pos whose half size is @p halfSize world units
+	 * at that depth (scale = viewport h * d / 2 / z pixels per unit). Only the
+	 * depth is pulled @p depthBias units towards the camera (not closer than 1),
+	 * so the quad is drawn over the geometry around it.
+	 */
+	void drawBillboard(const Vec3 &pos, float halfSize, float depthBias, const Material3D *mat);
 	/** Scene(1): draw the deferred translucent polygons now (next layer) */
 	void flushTranslucent();
 	/** Draw the deferred translucent polygons and copy the viewport to the front page */
@@ -104,6 +117,7 @@ private:
 	Mat4 _view;
 	Vec3 _cameraPos;
 	Mat4 _projection;
+	float _zoom, _aspect, _far;
 	Vec3 _ambient;
 	Common::Array<Light3D> _lights;
 	Common::Array<Tri> _deferred;

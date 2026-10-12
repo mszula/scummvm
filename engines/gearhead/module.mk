@@ -1,6 +1,7 @@
 MODULE := engines/gearhead
 
 MODULE_OBJS = \
+	airratchet.o \
 	archive.o \
 	autoscript.o \
 	car.o \
@@ -10,16 +11,19 @@ MODULE_OBJS = \
 	gearhead.o \
 	gfx.o \
 	input.o \
+	jobengine.o \
 	jobs.o \
 	mechanic.o \
 	metaengine.o \
+	partsbin.o \
 	renderer3d.o \
 	resources.o \
 	screens.o \
 	signin.o \
 	sound.o \
 	tlv.o \
-	ui.o
+	ui.o \
+	workshop.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_GEARHEAD), DYNAMIC_PLUGIN)

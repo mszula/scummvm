@@ -36,6 +36,8 @@ Input::Input() : _root(nullptr), _capture(nullptr), _keyTarget(nullptr), _hook(n
 	_buttons(0), _prevButtons(0) {
 	for (int i = 0; i < 256; i++)
 		_keys[i] = false;
+	for (int i = 0; i < 8; i++)
+		_prevKeys[i] = 0;
 }
 
 int Input::toScanCode(const Common::KeyState &ks) {
@@ -82,21 +84,7 @@ void Input::handleKey(int scanCode, int ascii, bool down) {
 		_hook->onKeyHook(scanCode, !down, ascii);
 	if (scanCode <= 0 || scanCode >= 256)
 		return;
-	if (down) {
-		if (!_keys[scanCode]) {
-			_keys[scanCode] = true;
-			_heldOrder.push_back(scanCode);
-		}
-	} else if (_keys[scanCode]) {
-		_keys[scanCode] = false;
-		for (uint i = 0; i < _heldOrder.size(); i++) {
-			if (_heldOrder[i] == scanCode) {
-				_heldOrder.remove_at(i);
-				break;
-			}
-		}
-		_releasedThisFrame.push_back(scanCode);
-	}
+	_keys[scanCode] = down;
 }
 
 void Input::injectMouse(const Common::Point &p) {
@@ -173,7 +161,7 @@ void Input::dispatchFrame() {
 	const bool lNow = _buttons & 1, lPrev = _prevButtons & 1;
 	const bool rNow = _buttons & 2, rPrev = _prevButtons & 2;
 
-#define MOUSE_TARGET (_capture ? _capture : _root)
+#define MOUSE_TARGET mouseTarget()
 	if (rNow)
 		send(MOUSE_TARGET, Event(kEvRHeld, _mouse));
 	if (rNow && !rPrev)
@@ -189,16 +177,27 @@ void Input::dispatchFrame() {
 		send(MOUSE_TARGET, Event(kEvLDown, _mouse));
 #undef MOUSE_TARGET
 
-	int sent = 0;
-	for (uint i = 0; i < _heldOrder.size() && sent < 8; i++) {
-		if (_heldOrder[i] < 0x80) {
-			send(_keyTarget, Event(kEvKeyDown, _mouse, _heldOrder[i]));
-			sent++;
+	// EventMgr_pump: the first 8 keys down in scan-code order get a key-held
+	// event; keys of last frame's list that are gone get a key-up
+	if (_keyTarget) {
+		int down[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		int n = 0;
+		for (int k = 0; k < 0x80 && n < 8; k++)
+			if (_keys[k])
+				down[n++] = k;
+		for (int i = 0; i < n; i++)
+			send(_keyTarget, Event(kEvKeyDown, _mouse, down[i]));
+		for (int i = 0; i < 8 && _prevKeys[i] != 0; i++) {
+			bool gone = true;
+			for (int j = 0; j < 8; j++)
+				if (_prevKeys[i] == down[j])
+					gone = false;
+			if (gone)
+				send(_keyTarget, Event(kEvKeyUp, _mouse, _prevKeys[i]));
 		}
+		for (int i = 0; i < 8; i++)
+			_prevKeys[i] = down[i];
 	}
-	for (uint i = 0; i < _releasedThisFrame.size(); i++)
-		send(_keyTarget, Event(kEvKeyUp, _mouse, _releasedThisFrame[i]));
-	_releasedThisFrame.clear();
 
 	_prevMouse = _mouse;
 	_prevButtons = _buttons;

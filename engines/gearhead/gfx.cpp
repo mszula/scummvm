@@ -87,6 +87,27 @@ void Gfx::blitKeyed(int pages, const Graphics::ManagedSurface &src, const Common
 	}
 }
 
+void Gfx::blitAdditive(int pages, const Graphics::ManagedSurface &src, int x, int y) {
+	for (int i = 0; i < 2; i++) {
+		if (!(pages & (1 << i)))
+			continue;
+		Common::Rect r(src.w, src.h);
+		int dx = x, dy = y;
+		if (!clipBlit(_pages[i], src, r, dx, dy))
+			continue;
+		for (int yy = 0; yy < r.height(); yy++) {
+			for (int xx = 0; xx < r.width(); xx++) {
+				byte sr, sg, sb, dr, dg, db;
+				src.format.colorToRGB(src.getPixel(r.left + xx, r.top + yy), sr, sg, sb);
+				if (!(sr | sg | sb))
+					continue;
+				_pages[i].format.colorToRGB(_pages[i].getPixel(dx + xx, dy + yy), dr, dg, db);
+				_pages[i].setPixel(dx + xx, dy + yy, _pages[i].format.RGBToColor(MIN(255, sr + dr), MIN(255, sg + dg), MIN(255, sb + db)));
+			}
+		}
+	}
+}
+
 void Gfx::fill(int pages, const Common::Rect &r, uint32 color) {
 	for (int i = 0; i < 2; i++) {
 		if (!(pages & (1 << i)))

@@ -27,9 +27,15 @@
 
 #include "gearhead/math3d.h"
 
+namespace Graphics {
+class ManagedSurface;
+struct PixelFormat;
+}
+
 namespace Gearhead {
 
 class Resources;
+class Sound;
 class TLVChunk;
 
 enum {
@@ -123,6 +129,12 @@ struct PartDef {
 	Common::Array<int> paintPolys;       ///< polys of the mesh drawn with the car paint (region 2 only)
 };
 
+/** CD_SOUND_IGNITION: an ignition sound that replaces misc\\carstart.wav while the part is installed */
+struct IgnitionSound {
+	int partId = -1;
+	Sound *sound = nullptr; ///< owned
+};
+
 /** A car model loaded from a .car file (AutoData) */
 class CarModel {
 public:
@@ -147,6 +159,7 @@ public:
 	Common::Array<Mesh3D *> _meshes;       ///< indexed by MESH_INDEX (may contain nullptr)
 	Common::Array<Mesh3D *> _specMeshes;   ///< same indexing
 	Common::Array<PartDef *> _parts;       ///< file order
+	Common::Array<IgnitionSound> _ignitionSounds;
 
 private:
 	Mesh3D *readMesh(const TLVChunk &c);
@@ -172,6 +185,13 @@ private:
 const char *conditionName(int condition);
 /** Material drawn on every polygon of a damaged part (CondLevel +0x94) */
 const Material3D *conditionMaterial(int condition);
+/** Highlight material (CondLevel +0x14): Show Condition, hovered parts, bin markers */
+const Material3D *conditionHighlight(int condition);
+/** CondLevel +0x08 status colour (16-bit modes) */
+Vec3 conditionColour(int condition);
+
+/** TLV bitmap (TEX_BITMAP, JOBPHASEIMAGE, DD_IMAGE) converted to a 2D surface */
+Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics::PixelFormat &format);
 
 /** g_PaintColors from Gfx24\PaintColors.tga (27 colours, divided by 256) */
 void loadPaintColors(Resources &res);

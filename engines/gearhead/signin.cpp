@@ -29,13 +29,9 @@
 #include "gearhead/screens.h"
 #include "gearhead/signin.h"
 #include "gearhead/sound.h"
+#include "gearhead/workshop.h"
 
 namespace Gearhead {
-
-enum {
-	kDlgButtonOk = 0,
-	kDlgButtonCancel = 1
-};
 
 /**
  * NewMechDlg_init (0x42adfc) / SignIn_initPrefabDlg (0x42d5a0) adjust the
@@ -185,6 +181,7 @@ void TextInput::onKeyHook(int scanCode, bool released, int ascii) {
 // ---------------------------------------------------------------- NewMechDialog
 
 NewMechDialog::NewMechDialog(SignInScreen *owner) : _owner(owner) {
+	_takeFocus = true; // NewMechDlg_ctor (0x42ac70)
 	_input._onOk = new Common::Functor0Mem<void, NewMechDialog>(this, &NewMechDialog::ok);
 	_input._onCancel = new Common::Functor0Mem<void, NewMechDialog>(this, &NewMechDialog::cancel);
 	_input._onChange = new Common::Functor0Mem<void, NewMechDialog>(this, &NewMechDialog::drawField);
@@ -327,9 +324,7 @@ void SignInScreen::activate(bool saveFirst) {
 	}
 	refreshRows();
 	g_engine->_gfx->blit(kPageBoth, *_background, 0, 0);
-	g_engine->_input->setRoot(this);
-	g_engine->_input->setKeyTarget(this);
-	g_engine->_input->releaseCapture();
+	g_engine->_input->activateScreen(this);
 	_active = true;
 	repaint();
 	debugC(1, kDebugGame, "..SignIn Set Active.");
@@ -384,7 +379,7 @@ void SignInScreen::signIn(ProfileRow *row) {
 	g_engine->_mechanic = m;
 	m->_id = row->summary()->id;
 	_zipper->play();
-	m->_signInTime = g_engine->gameTimeMs();
+	m->_clockTime = g_engine->gameTimeMs();
 	_active = false;
 	g_engine->_workShop->activate();
 }

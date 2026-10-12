@@ -32,12 +32,15 @@
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
+#include "gearhead/jobengine.h"
 #include "gearhead/mechanic.h"
 #include "gearhead/renderer3d.h"
 #include "gearhead/resources.h"
 #include "gearhead/screens.h"
 #include "gearhead/signin.h"
 #include "gearhead/sound.h"
+#include "gearhead/ui.h"
+#include "gearhead/workshop.h"
 
 namespace Gearhead {
 
@@ -45,16 +48,19 @@ GearheadEngine *g_engine;
 
 GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _res(nullptr), _gfx(nullptr), _input(nullptr), _snd(nullptr), _jukebox(nullptr),
-	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _signIn(nullptr), _workShop(nullptr), _credits(nullptr),
-	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _lastFrameTime(0), _frameDelta(0.1f) {
+	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _msgBox(nullptr), _jobEngine(nullptr), _signIn(nullptr), _workShop(nullptr), _credits(nullptr),
+	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
+	_prevGameTime(0), _frameDelta(0.1f) {
 	g_engine = this;
 }
 
 GearheadEngine::~GearheadEngine() {
+	delete _jobEngine;
 	delete _signIn;
 	delete _workShop;
 	delete _credits;
 	delete _mechanic;
+	delete _msgBox;
 	delete _script;
 	delete _renderer3d;
 	delete _jukebox;
@@ -67,10 +73,6 @@ GearheadEngine::~GearheadEngine() {
 
 bool GearheadEngine::hasFeature(EngineFeature f) const {
 	return f == kSupportsReturnToLauncher;
-}
-
-uint32 GearheadEngine::gameTimeMs() const {
-	return g_system->getMillis() - _startTime;
 }
 
 // ---------------------------------------------------------------- profiles
@@ -145,15 +147,36 @@ bool GearheadEngine::runFrame() {
 		_quitRequested = true;
 		return false;
 	}
-	// Timer_update (0x454d24): smoothed frame time
-	const uint32 now = g_system->getMillis();
-	if (_lastFrameTime)
-		_frameDelta = (now - _lastFrameTime) / 1000.0f * 0.15f + _frameDelta * 0.85f;
-	_lastFrameTime = now;
+	tickTimer();
 	_input->dispatchFrame();
 	_gfx->present();
 	g_system->delayMillis(10);
 	return !_quitRequested && !shouldQuit();
+}
+
+void GearheadEngine::tickTimer() {
+	// Timer_tick (0x454d24): game time and the smoothed frame time
+	const uint32 prevReal = _realTime;
+	_realTime = g_system->getMillis() - _startTime;
+	_frameDelta = (float)((_realTime - prevReal) / 1000.0 * 0.15 + _frameDelta * 0.85);
+	_prevGameTime = _gameTime;
+	_gameTime += _realTime - prevReal;
+}
+
+bool GearheadEngine::pollOnly() {
+	if (_quitRequested)
+		return false;
+	if (!_input->poll() || shouldQuit()) {
+		_saveOnQuit = true;
+		_quitRequested = true;
+		return false;
+	}
+	if (_script)
+		_script->update();
+	tickTimer();
+	_gfx->present();
+	g_system->delayMillis(10);
+	return true;
 }
 
 void GearheadEngine::waitMs(uint32 ms, bool skippable) {
@@ -212,6 +235,7 @@ void GearheadEngine::runStartup() {
 	loadPaintColors(*_res);
 	if (!loadGameFonts(*_res, _fonts))
 		error("Failed to load fonts");
+	_msgBox = createMessageBox();
 	_pointer = _res->getImage("Pointers\\Glove.tga");
 	_gfx->setCursor(_pointer, 0, 0);
 	_gfx->showCursor(true);
@@ -236,6 +260,8 @@ void GearheadEngine::runStartup() {
 	_credits = new CreditsScreen();
 	_credits->init();
 	progress();
+	_jobEngine = new JobEngine();
+	_jobEngine->init();
 	progress(); // JobEngine
 
 	_res->purge();
@@ -254,7 +280,8 @@ Common::Error GearheadEngine::run() {
 	_fixOriginalBugs = ConfMan.getBool("fix_original_bugs");
 
 	_startTime = g_system->getMillis();
-	_rnd.setSeed(g_system->getMillis()); // srand(GetTickCount())
+	// srand(GetTickCount()); a fixed seed can be set for reproducible runs
+	_rnd.setSeed(ConfMan.hasKey("gearhead_seed") ? (uint32)ConfMan.getInt("gearhead_seed") : g_system->getMillis());
 
 	Common::Archive *cabinet = nullptr;
 	if (_gameDescription->flags & GF_INSTALLER_CAB) {
@@ -293,7 +320,7 @@ Common::Error GearheadEngine::run() {
 	// Alt+F4 saves the current mechanic when no job is active. The original
 	// does not check for the dev mechanics (CarDev/JobDev); the Exit button
 	// of the sign-in screen and a normal shutdown save nothing.
-	if (_saveOnQuit && _mechanic && !_mechanic->_jobActive && !(_fixOriginalBugs && _mechanic->isDev())) {
+	if (_saveOnQuit && _mechanic && !_mechanic->_job && !(_fixOriginalBugs && _mechanic->isDev())) {
 		Common::WriteStream *ws = createMechanic(_mechanic->_id);
 		if (ws) {
 			_mechanic->save(*ws);

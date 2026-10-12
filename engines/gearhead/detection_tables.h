@@ -43,7 +43,8 @@ const ADGameDescription gameDescriptions[] = {
 	{
 		"gearhead",
 		"CD",
-		AD_ENTRY1s("data1.cab", "f361efb6a808b2407ff6fddf66467fc8", 27970716),
+		AD_ENTRY2s("data1.cab",      "f361efb6a808b2407ff6fddf66467fc8", 27970716,
+		           "Setup.Ins",      "02d71326cfd0cf2178d62296e4f70888", 58912),
 		Common::EN_ANY,
 		Common::kPlatformWindows,
 		ADGF_UNSTABLE | GF_INSTALLER_CAB,

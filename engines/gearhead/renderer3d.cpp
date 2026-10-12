@@ -29,7 +29,7 @@
 
 namespace Gearhead {
 
-Renderer3D::Renderer3D() : _initialized(false), _bound(nullptr), _triangles(0) {
+Renderer3D::Renderer3D() : _initialized(false), _zoom(1.0f), _aspect(1.0f), _far(1000.0f), _bound(nullptr), _triangles(0) {
 }
 
 Renderer3D::~Renderer3D() {
@@ -67,14 +67,22 @@ void Renderer3D::beginFrame(const Common::Rect &viewport, const Vec3 &clearColou
 	tglLoadIdentity();
 }
 
-void Renderer3D::setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ) {
+void Renderer3D::setViewport(const Common::Rect &viewport) {
+	_viewport = viewport;
+	tglViewport(viewport.left, kScreenHeight - viewport.bottom, viewport.width(), viewport.height());
+}
+
+void Renderer3D::setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ, float aspectMul) {
 	_view = cameraWorld.inverse();
 	_cameraPos = cameraWorld.row(3);
 
 	// SetPerspective(d, aspectMul = 1, near, far): x_ndc = x*d/(a*z), y_ndc = y*d/z,
 	// depth = (1 - d/z)/q with q = 1 - d/far; then remapped to OpenGL's [-1, 1]
-	const float a = (float)_viewport.width() / (float)_viewport.height();
+	const float a = (float)_viewport.width() / (float)_viewport.height() * aspectMul;
 	const float d = zoom;
+	_zoom = d;
+	_aspect = a;
+	_far = farZ;
 	const float q = 1.0f - d / farZ;
 	Mat4 p;
 	for (int i = 0; i < 16; i++)
@@ -195,6 +203,45 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 			_deferred.push_back(t);
 		else
 			emit(t);
+	}
+}
+
+void Renderer3D::drawBillboard(const Vec3 &pos, float halfSize, float depthBias, const Material3D *mat) {
+	Vec3 v = _view.transformPoint(pos);
+	if (v.z < 1.0f)
+		v.z = 1.0f;
+	if (v.z >= _far)
+		return;
+	// Screen-space (NDC) centre and half size
+	const float cx = v.x * _zoom / (_aspect * v.z), cy = v.y * _zoom / v.z;
+	const float hx = halfSize * _zoom / (_aspect * v.z), hy = halfSize * _zoom / v.z;
+	float z = v.z - depthBias;
+	if (z < 1.0f)
+		z = 1.0f;
+	// The original's pre-transformed vertices are never clipped; our depth range starts at d
+	z = MAX(z, _zoom * 1.001f);
+	static const float kCorner[4][2] = { { -1, 1 }, { 1, 1 }, { 1, -1 }, { -1, -1 } };
+	static const float kUV[4][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
+	Tri t[2];
+	for (int k = 0; k < 2; k++) {
+		static const int kIdx[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
+		t[k].mat = mat;
+		t[k].depth = z;
+		for (int j = 0; j < 3; j++) {
+			const int i = kIdx[k][j];
+			Vert &o = t[k].v[j];
+			// A view-space point at depth z that projects to the wanted NDC position
+			const float nx = cx + kCorner[i][0] * hx, ny = cy + kCorner[i][1] * hy;
+			o.pos = Vec3(nx * _aspect * z / _zoom, ny * z / _zoom, z);
+			o.u = kUV[i][0];
+			o.v = kUV[i][1];
+			o.r = o.g = o.b = 1.0f;
+			o.a = mat->alpha;
+		}
+		if (mat->translucent())
+			_deferred.push_back(t[k]);
+		else
+			emit(t[k]);
 	}
 }
 

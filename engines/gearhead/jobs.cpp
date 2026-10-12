@@ -21,9 +21,12 @@
 
 #include "common/debug.h"
 #include "common/stream.h"
+#include "graphics/managed_surface.h"
 
 #include "gearhead/car.h"
 #include "gearhead/detection.h"
+#include "gearhead/gearhead.h"
+#include "gearhead/gfx.h"
 #include "gearhead/jobs.h"
 #include "gearhead/mechanic.h"
 #include "gearhead/random.h"
@@ -33,9 +36,14 @@
 namespace Gearhead {
 
 bool hasCompletedJob(const Mechanic &mech, int jobId) {
-	if (jobId < 0 || jobId >= kCompletedJobWords * 32)
-		return false;
-	return (mech._completedJobs[jobId / 32] >> (jobId % 32)) & 1;
+	return mech.isJobCompleted(jobId);
+}
+
+JobList::~JobList() {
+	for (uint i = 0; i < _jobs.size(); i++)
+		_jobs[i].destroyCar();
+	for (uint i = 0; i < _phaseImages.size(); i++)
+		delete _phaseImages[i];
 }
 
 static void readStats(const TLVChunk &c, uint tag, Common::Array<JobStat> &out) {
@@ -98,11 +106,11 @@ void JobList::loadAll(Resources &res, MsvcRandom &rnd) {
 	debugC(1, kDebugGame, "Loaded %d jobs from %d files", _jobs.size(), _fileNames.size());
 }
 
-const Job *JobList::pickNext(const Mechanic &mech, CarList &cars) const {
-	const Job *best = nullptr;
+Job *JobList::pickNext(const Mechanic &mech, CarList &cars) {
+	Job *best = nullptr;
 	float bestFee = 1e13f;
 	for (uint i = 0; i < _jobs.size(); i++) {
-		const Job &job = _jobs[i];
+		Job &job = _jobs[i];
 		if (job.fee <= bestFee && !hasCompletedJob(mech, job.id)) {
 			CarModel *model = cars.find(job.carId, false);
 			if (model && model->_minSkill <= mech._skillIndex) {
@@ -114,22 +122,100 @@ const Job *JobList::pickNext(const Mechanic &mech, CarList &cars) const {
 	return best;
 }
 
-const Job *JobList::findById(int id) const {
+Job *JobList::findById(int id) {
 	for (uint i = 0; i < _jobs.size(); i++)
 		if (_jobs[i].id == id)
 			return &_jobs[i];
 	return nullptr;
 }
 
-CarInstance *Job::createCar(CarList &cars, MsvcRandom &rnd) const {
+void JobList::loadPhaseImages(Job &job, Resources &res) {
+	if (job.fileIndex < 0 || job.fileIndex >= (int)_fileNames.size())
+		return;
+	Common::SeekableReadStream *s = res.open("Data\\Jobs\\" + _fileNames[job.fileIndex]);
+	if (!s)
+		return;
+	TLVChunk *root = TLVReader::parseFile(*s, kTag_JOBFILE);
+	delete s;
+	if (!root)
+		return;
+	const Common::Array<const TLVChunk *> images = root->findAll(kTag_JOBPHASEIMAGE);
+	for (uint i = 0; i < job.phases.size(); i++) {
+		// Pool slot i belongs to phase i; the slots are reused by later jobs
+		if (_phaseImages.size() < i + 1)
+			_phaseImages.push_back(nullptr);
+		const int idx = job.phases[i].imageIndex;
+		Graphics::ManagedSurface *img = nullptr;
+		if (idx >= 0 && idx < (int)images.size())
+			img = decodeBitmapSurface(*images[idx], g_engine->_gfx->format());
+		if (!img)
+			img = new Graphics::ManagedSurface(1, 1, g_engine->_gfx->format());
+		// The slot's bitmap object is reused, so phases of other jobs that
+		// still point to it see the new portrait (as in the original)
+		if (!_phaseImages[i])
+			_phaseImages[i] = new Graphics::ManagedSurface();
+		_phaseImages[i]->copyFrom(*img);
+		delete img;
+		job.phases[i].image = _phaseImages[i];
+	}
+	delete root;
+}
+
+void Job::createCar(CarList &cars, MsvcRandom &rnd) {
+	destroyCar();
 	CarModel *model = cars.find(carId, true);
 	if (!model)
-		return nullptr;
-	CarInstance *car = new CarInstance(model, rnd);
+		return;
+	car = new CarInstance(model, rnd);
 	car->fillPaint(carColor);
 	for (uint i = 0; i < startStats.size(); i++)
 		car->applyStartStat(startStats[i].type, startStats[i].subject, startStats[i].condition);
-	return car;
+}
+
+void Job::destroyCar() {
+	delete car;
+	car = nullptr;
+}
+
+JobPhase *Job::nextPhase(int type) {
+	for (uint i = phaseCursor; i < phases.size(); i++) {
+		if (phases[i].type == type) {
+			phaseCursor = i + 1;
+			return &phases[i];
+		}
+	}
+	for (int i = 0; i < phaseCursor && i < (int)phases.size(); i++) {
+		if (phases[i].type == type) {
+			phaseCursor = i + 1;
+			return &phases[i];
+		}
+	}
+	phaseCursor = 0;
+	return nullptr;
+}
+
+/** JobStat_isMet (0x448d73) */
+static bool statMet(const JobStat &s, const CarInstance &car) {
+	if (s.type == 0) {
+		const Part *p = car.findPart(s.subject);
+		return p && (s.condition < 0 || p->condition >= s.condition);
+	}
+	if (s.type == 1)
+		return car.isComplete(s.subject) && car.minCondition(s.subject) >= s.condition;
+	return false;
+}
+
+bool Job::isComplete() const {
+	if (!car)
+		return false;
+	for (uint i = 0; i < completeStats.size(); i++)
+		if (!statMet(completeStats[i], *car))
+			return false;
+	return true;
+}
+
+bool Job::isPartAllowed(const PartDef *pd) const {
+	return allowCustomParts || !pd->custom;
 }
 
 } // End of namespace Gearhead

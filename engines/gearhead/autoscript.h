@@ -43,7 +43,7 @@ public:
 
 private:
 	struct Action {
-		enum Type { kMove, kDown, kUp, kKeyDown, kKeyUp, kFrames };
+		enum Type { kMove, kDown, kUp, kRDown, kRUp, kKeyDown, kKeyUp, kFrames };
 		Type type;
 		int a, b;
 	};

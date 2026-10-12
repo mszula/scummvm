@@ -46,7 +46,7 @@ class ManagedSurface;
  * This is the namespace of the Gearhead Garage engine, a reimplementation of
  * the VMech engine of "Snap-on Gearhead Garage" (Ratloop / Mekada, 1999).
  *
- * Status: start-up sequence and the Sign In screen.
+ * Status: start-up sequence, Sign In, the workshop with the job system.
  *
  * Games using this engine:
  * - Snap-on Gearhead Garage
@@ -57,8 +57,10 @@ class AutoScript;
 class CreditsScreen;
 class Gfx;
 class Input;
+class JobEngine;
 class JukeBox;
 class Mechanic;
+class PreFabDialog;
 class Renderer3D;
 class Resources;
 class SignInScreen;
@@ -83,9 +85,16 @@ public:
 	bool runFrame();
 	/** Busy-wait like the original splash/modal loops, but keep the window alive */
 	void waitMs(uint32 ms, bool skippable = false);
+	/**
+	 * EventMgr_poll (0x4538ff) alone: advance the clock and read the devices
+	 * without dispatching events, used by the loops that wait for a sound.
+	 */
+	bool pollOnly();
 
-	/** Milliseconds since start (g_GameTimeMs, Timer_update 0x454d24) */
-	uint32 gameTimeMs() const;
+	/** Game time in ms (g_GameTimeMs), advanced once per frame by Timer_tick (0x454d24) */
+	uint32 gameTimeMs() const { return _gameTime; }
+	/** g_PrevTimeMs: the game time of the previous frame */
+	uint32 prevGameTimeMs() const { return _prevGameTime; }
 	/** Smoothed frame time in seconds (g_FrameDelta, Timer_update 0x454d24) */
 	float frameDelta() const { return _frameDelta; }
 
@@ -113,6 +122,8 @@ public:
 
 	Graphics::ManagedSurface *_pointer;
 	Mechanic *_mechanic;
+	PreFabDialog *_msgBox;   ///< the standard OK/Cancel message box (Mechanic+0x80)
+	JobEngine *_jobEngine;
 
 	SignInScreen *_signIn;
 	WorkShopScreen *_workShop;
@@ -124,13 +135,16 @@ protected:
 private:
 	void importOriginalSaves();
 	void runStartup();
+	void tickTimer();
 
 	const ADGameDescription *_gameDescription;
 	bool _fixOriginalBugs;
 	bool _quitRequested;
 	bool _saveOnQuit;   ///< Alt+F4 (and quitting through ScummVM) saves the mechanic
 	uint32 _startTime;
-	uint32 _lastFrameTime;
+	uint32 _realTime;
+	uint32 _gameTime;
+	uint32 _prevGameTime;
 	float _frameDelta;
 };
 
