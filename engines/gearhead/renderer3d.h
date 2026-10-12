@@ -96,6 +96,9 @@ public:
 	void drawScreenQuad(const Common::Rect &r, float u0, float v0, float u1, float v1, const Material3D *mat, float depth);
 	/** Scene(1): draw the deferred translucent polygons now (next layer) */
 	void flushTranslucent();
+	/** The draw calls until endLayer() are one blended layer: each pixel gets one of them (the gloss of adjacent meshes) */
+	void beginLayer() { _layerCall = ++_call; }
+	void endLayer() { _layerCall = 0; }
 	/** Draw the deferred translucent polygons and copy the viewport to the front page */
 	void endFrame(Gfx &gfx);
 
@@ -111,6 +114,7 @@ private:
 		Vert v[3];
 		const Material3D *mat;
 		float depth;
+		uint32 call; ///< the draw call it comes from
 	};
 
 	Vec3 light(const Vec3 &p, const Vec3 &n, const Vec3 &base, bool unlit,
@@ -125,6 +129,13 @@ private:
 	 */
 	void flushBatch();
 	uint32 textureId(Texture3D *t);
+	/**
+	 * TinyGL fills the pixels on both sides of an edge, so the pixels on the
+	 * edges shared by two triangles of a blended mesh would be blended twice
+	 * (light or dark lines). Every draw call gets a stencil value and blends
+	 * each pixel once.
+	 */
+	byte stencilFor(const Tri &t);
 
 	bool _initialized;
 	Common::Rect _viewport;
@@ -140,6 +151,10 @@ private:
 	Common::Array<Tri> _batch;
 	const Material3D *_batchMat;
 	uint _pendingVerts;
+	uint32 _call, _layerCall;
+	Common::HashMap<uint32, byte> _callStencil;
+	int _stencilNext;
+	byte _batchStencil, _glStencil;
 
 	struct TexEntry {
 		uint32 id;

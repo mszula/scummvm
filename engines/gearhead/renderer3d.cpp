@@ -30,7 +30,7 @@
 namespace Gearhead {
 
 Renderer3D::Renderer3D() : _initialized(false), _zoom(1.0f), _aspect(1.0f), _far(1000.0f), _bound(nullptr), _triangles(0),
-	_batchMat(nullptr), _pendingVerts(0) {
+	_batchMat(nullptr), _pendingVerts(0), _call(0), _layerCall(0), _stencilNext(1), _batchStencil(0), _glStencil(0) {
 }
 
 Renderer3D::~Renderer3D() {
@@ -44,13 +44,15 @@ Renderer3D::~Renderer3D() {
 }
 
 bool Renderer3D::init(const Graphics::PixelFormat &format) {
-	TinyGL::createContext(kScreenWidth, kScreenHeight, format, kMaxTextureSize, false, false, 8 * 1024 * 1024);
+	TinyGL::createContext(kScreenWidth, kScreenHeight, format, kMaxTextureSize, true, false, 8 * 1024 * 1024);
 	tglDisable(TGL_LIGHTING);
 	tglDisable(TGL_CULL_FACE); // culling uses the stored face normals (done here)
 	tglEnable(TGL_DEPTH_TEST);
 	tglDepthFunc(TGL_LEQUAL);
 	tglShadeModel(TGL_SMOOTH);
 	tglTexEnvi(TGL_TEXTURE_ENV, TGL_TEXTURE_ENV_MODE, TGL_MODULATE);
+	tglDisable(TGL_STENCIL_TEST);
+	tglStencilOp(TGL_KEEP, TGL_KEEP, TGL_REPLACE);
 	_initialized = true;
 	return true;
 }
@@ -61,10 +63,12 @@ void Renderer3D::beginFrame(const Common::Rect &viewport, const Vec3 &clearColou
 	_deferred.clear();
 	_bound = nullptr;
 	_triangles = 0;
+	_callStencil.clear();
+	_stencilNext = 1;
 	tglViewport(viewport.left, kScreenHeight - viewport.bottom, viewport.width(), viewport.height());
 	tglClearColor(clearColour.x, clearColour.y, clearColour.z, 1.0f);
 	tglDepthMask(TGL_TRUE);
-	tglClear(TGL_COLOR_BUFFER_BIT | TGL_DEPTH_BUFFER_BIT);
+	tglClear(TGL_COLOR_BUFFER_BIT | TGL_DEPTH_BUFFER_BIT | TGL_STENCIL_BUFFER_BIT);
 	tglMatrixMode(TGL_MODELVIEW);
 	tglLoadIdentity();
 }
@@ -146,6 +150,7 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 		objLights[i].direction = inv.transformDir(_lights[i].direction);
 	}
 
+	const uint32 call = _layerCall ? _layerCall : ++_call;
 	// Gouraud colours and view-space positions per vertex
 	const uint nv = mesh.vertices.size();
 	Common::Array<Vec3> lit(nv), litUnlit(nv), view(nv);
@@ -191,6 +196,7 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 		Tri t;
 		t.mat = m;
 		t.depth = 0.0f;
+		t.call = call;
 		for (int j = 0; j < 3; j++) {
 			Vert &v = t.v[j];
 			v.pos = view[poly.v[j]];
@@ -228,10 +234,12 @@ void Renderer3D::drawBillboard(const Vec3 &pos, float halfSize, float depthBias,
 	static const float kCorner[4][2] = { { -1, 1 }, { 1, 1 }, { 1, -1 }, { -1, -1 } };
 	static const float kUV[4][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
 	Tri t[2];
+	const uint32 call = ++_call;
 	for (int k = 0; k < 2; k++) {
 		static const int kIdx[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
 		t[k].mat = mat;
 		t[k].depth = z;
+		t[k].call = call;
 		for (int j = 0; j < 3; j++) {
 			const int i = kIdx[k][j];
 			Vert &o = t[k].v[j];
@@ -266,10 +274,12 @@ void Renderer3D::drawScreenQuad(const Common::Rect &r, float u0, float v0, float
 		tglDisable(TGL_DEPTH_TEST);
 		tglDepthMask(TGL_FALSE);
 	}
+	const uint32 call = ++_call;
 	for (int k = 0; k < 2; k++) {
 		Tri t;
 		t.mat = mat;
 		t.depth = z;
+		t.call = call;
 		for (int j = 0; j < 3; j++) {
 			const int *cn = kCorner[kIdx[k][j]];
 			Vert &o = t.v[j];
@@ -369,16 +379,45 @@ void Renderer3D::bindMaterial(const Material3D *m) {
 }
 
 void Renderer3D::emit(const Tri &t) {
-	if (t.mat != _batchMat)
+	const byte stencil = stencilFor(t);
+	if (t.mat != _batchMat || stencil != _batchStencil)
 		flushBatch();
 	_batchMat = t.mat;
+	_batchStencil = stencil;
 	_batch.push_back(t);
+}
+
+byte Renderer3D::stencilFor(const Tri &t) {
+	if (t.mat->blendSrc == 1 && t.mat->blendDst == 0)
+		return 0;
+	Common::HashMap<uint32, byte>::const_iterator it = _callStencil.find(t.call);
+	if (it != _callStencil.end())
+		return it->_value;
+	if (_stencilNext > 255) {
+		// Out of values: start again on a cleared stencil
+		flushBatch();
+		tglClear(TGL_STENCIL_BUFFER_BIT);
+		_callStencil.clear();
+		_stencilNext = 1;
+	}
+	const byte value = (byte)_stencilNext++;
+	_callStencil[t.call] = value;
+	return value;
 }
 
 void Renderer3D::flushBatch() {
 	if (_batch.empty())
 		return;
 	bindMaterial(_batchMat);
+	if (_batchStencil != _glStencil) {
+		if (!_batchStencil) {
+			tglDisable(TGL_STENCIL_TEST);
+		} else {
+			tglEnable(TGL_STENCIL_TEST);
+			tglStencilFunc(TGL_NOTEQUAL, _batchStencil, 0xff);
+		}
+		_glStencil = _batchStencil;
+	}
 	tglBegin(TGL_TRIANGLES);
 	for (uint i = 0; i < _batch.size(); i++) {
 		for (int j = 0; j < 3; j++) {

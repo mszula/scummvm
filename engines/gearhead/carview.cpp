@@ -376,6 +376,8 @@ void CarView::renderScene(const Common::Rect &viewport, const Vec3 &clearColour)
 	Mat4 camB = _cameraWorld;
 	camB.setRow(3, _cameraWorld.row(3) + _cameraWorld.row(2), 1.0f);
 	r3d->setCamera(camB, kZoom, 1.0f, 1000.0f);
+	// The gloss of adjacent meshes is added once on their shared edges
+	r3d->beginLayer();
 	r3d->setAmbient(Vec3(0, 0, 0));
 	r3d->clearLights();
 	const Vec3 glossLight = _cameraWorld.transformPoint(Vec3(-400.0f, 1000.0f, -600.0f));
@@ -403,6 +405,7 @@ void CarView::renderScene(const Common::Rect &viewport, const Vec3 &clearColour)
 		}
 		r3d->drawMesh(*m, m->local, mats, &gloss);
 	}
+	r3d->endLayer();
 	debugC(3, kDebugGraphics, "CarView: %d triangles", r3d->trianglesDrawn());
 }
 
