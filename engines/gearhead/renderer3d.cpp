@@ -137,6 +137,9 @@ Vec3 Renderer3D::light(const Vec3 &p, const Vec3 &n, const Vec3 &base, bool unli
 	return Vec3(MIN(lit.x, 1.0f), MIN(lit.y, 1.0f), MIN(lit.z, 1.0f));
 }
 
+/** Kept between the vertex colours and the ends of the range (less than an RGB565 step) */
+static const float kColourMargin = 1.0f / 256.0f;
+
 void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::Array<const Material3D *> &materials,
                           const Common::Array<Vec3> *vertexColours) {
 	const Mat4 inv = world.inverse();
@@ -207,6 +210,16 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 			v.g = c.y;
 			v.b = c.z;
 			v.a = m->shadeAlpha == 1 ? m->alpha : (m->shadeAlpha == 2 ? mesh.vertices[poly.v[j]].alpha : 1.0f);
+			if (m->shadeColor == 2) {
+				// TinyGL steps the Gouraud colours in fixed point without a margin and
+				// keeps the low byte: a value a little past 0 or 1 wraps (white or
+				// black pixels along the edges, e.g. where the gloss is 0)
+				v.r = CLIP(v.r, kColourMargin, 1.0f - kColourMargin);
+				v.g = CLIP(v.g, kColourMargin, 1.0f - kColourMargin);
+				v.b = CLIP(v.b, kColourMargin, 1.0f - kColourMargin);
+			}
+			if (m->shadeAlpha == 2)
+				v.a = CLIP(v.a, kColourMargin, 1.0f - kColourMargin);
 			t.depth = MAX(t.depth, v.pos.z);
 		}
 
