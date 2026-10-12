@@ -70,13 +70,14 @@ void Renderer3D::beginFrame(const Common::Rect &viewport, const Vec3 &clearColou
 }
 
 void Renderer3D::setViewport(const Common::Rect &viewport) {
-	flushBatch();
+	// The deferred polygons belong to the current viewport and camera
+	flushTranslucent();
 	_viewport = viewport;
 	tglViewport(viewport.left, kScreenHeight - viewport.bottom, viewport.width(), viewport.height());
 }
 
 void Renderer3D::setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ, float aspectMul) {
-	flushBatch();
+	flushTranslucent();
 	_view = cameraWorld.inverse();
 	_cameraPos = cameraWorld.row(3);
 
