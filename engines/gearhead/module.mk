@@ -2,6 +2,7 @@ MODULE := engines/gearhead
 
 MODULE_OBJS = \
 	airratchet.o \
+	auction.o \
 	archive.o \
 	autoscript.o \
 	car.o \

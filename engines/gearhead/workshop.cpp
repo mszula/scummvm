@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "graphics/managed_surface.h"
 
+#include "gearhead/auction.h"
 #include "gearhead/car.h"
 #include "gearhead/carlot.h"
 #include "gearhead/gearhead.h"
@@ -212,7 +213,13 @@ void CarActionsPane::onGetJob(Button *b) {
 }
 
 void CarActionsPane::onAuctionCar(Button *b) {
-	notImplemented("The Auction");
+	// CarActions_onAuctionCar (0x41009b)
+	Mechanic *m = g_engine->_mechanic;
+	if (!m->_car)
+		return;
+	if (g_engine->_msgBox->ask("Auction Car", "You are about to auction your car. Once it's on the block, the only way to get it back "
+	                           "is to bid on it. Do you want to continue?", kDlgButtonOk, kDlgButtonCancel))
+		g_engine->_auction->activate(AuctionScreen::kModeSell);
 }
 
 void CarActionsPane::onCatalog(Button *b) {
@@ -262,7 +269,7 @@ void NavPane::onAuction(Button *b) {
 		m->msgCarLotFull();
 		return;
 	}
-	notImplemented("The Auction");
+	g_engine->_auction->activate(AuctionScreen::kModeBuy);
 }
 
 void NavPane::onCarLot(Button *b) {

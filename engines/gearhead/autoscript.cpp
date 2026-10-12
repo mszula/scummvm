@@ -26,6 +26,7 @@
 #include "common/system.h"
 #include "common/tokenizer.h"
 
+#include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
@@ -217,6 +218,9 @@ void AutoScript::execute(const Common::String &line) {
 		// Test helper: screen positions of the car's parts / the bolts / the bin cells
 		const Common::String what = tok.nextToken();
 		g_engine->_workShop->debugDump(what);
+	} else if (cmd == "dumpauction") {
+		if (g_engine->_auction)
+			g_engine->_auction->debugDump();
 	} else if (cmd == "log") {
 		debug("AutoScript: %s", line.substr(4).c_str());
 	} else if (cmd == "quit") {

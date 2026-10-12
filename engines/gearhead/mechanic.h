@@ -34,6 +34,7 @@ class WriteStream;
 
 namespace Gearhead {
 
+class MsvcRandom;
 class TLVChunk;
 class TLVWriter;
 struct Job;
@@ -59,6 +60,11 @@ struct SkillLevel {
 };
 /** SkillLevel_get (0x45f8dc): clamped to 0..4 */
 const SkillLevel &skillLevel(int index);
+/**
+ * Auto_randomize with the ranges of a skill level, drawn fraction first, then
+ * spread, then centre (Mechanic_addNewCar, Auction_generateCar)
+ */
+void randomizeForSkill(CarInstance *car, int skillIndex, MsvcRandom &rnd);
 
 /** Seconds as "HH:MM:SS" (FormatDuration 0x450843, compact) */
 Common::String formatWorkTime(int seconds);

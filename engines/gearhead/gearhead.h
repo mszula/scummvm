@@ -54,6 +54,7 @@ class ManagedSurface;
 namespace Gearhead {
 
 class AutoScript;
+class AuctionScreen;
 class CarLotScreen;
 class CreditsScreen;
 class Gfx;
@@ -131,6 +132,7 @@ public:
 
 	SignInScreen *_signIn;
 	WorkShopScreen *_workShop;
+	AuctionScreen *_auction;
 	CarLotScreen *_carLot;
 	JunkYardScreen *_junkYard;
 	CreditsScreen *_credits;

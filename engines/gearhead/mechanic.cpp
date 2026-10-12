@@ -336,6 +336,14 @@ void Mechanic::drawCash() const {
 
 // ---------------------------------------------------------------- cars
 
+void randomizeForSkill(CarInstance *car, int skillIndex, MsvcRandom &rnd) {
+	const SkillLevel &s = skillLevel(skillIndex);
+	const float fraction = s.partFraction[0] + rnd.frand(s.partFraction[1] - s.partFraction[0]);
+	const float spread = s.condSpread[0] + rnd.frand(s.condSpread[1] - s.condSpread[0]);
+	const float centre = s.condCentre[0] + rnd.frand(s.condCentre[1] - s.condCentre[0]);
+	car->randomize(centre, spread, fraction);
+}
+
 CarInstance *Mechanic::addNewCar(int carId) {
 	CarModel *model = g_engine->_cars.find(carId, true);
 	if (!model)
@@ -344,12 +352,7 @@ CarInstance *Mechanic::addNewCar(int carId) {
 	CarInstance *car = new CarInstance(model, rnd);
 	_cars.push_back(car);
 	_car = car;
-	// The three ranges are drawn fraction first, then spread, then centre
-	const SkillLevel &s = skillLevel(_skillIndex);
-	const float fraction = s.partFraction[0] + rnd.frand(s.partFraction[1] - s.partFraction[0]);
-	const float spread = s.condSpread[0] + rnd.frand(s.condSpread[1] - s.condSpread[0]);
-	const float centre = s.condCentre[0] + rnd.frand(s.condCentre[1] - s.condCentre[0]);
-	car->randomize(centre, spread, fraction);
+	randomizeForSkill(car, _skillIndex, rnd);
 	ensureBank(car);
 	car->_careerNum = _totalCareerAutos++;
 	return car;

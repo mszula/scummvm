@@ -28,6 +28,7 @@
 #include "engines/util.h"
 #include "graphics/managed_surface.h"
 
+#include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
 #include "gearhead/carlot.h"
 #include "gearhead/gearhead.h"
@@ -52,7 +53,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_gameDescription(gameDesc), _res(nullptr), _gfx(nullptr), _input(nullptr), _snd(nullptr), _jukebox(nullptr),
 	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _msgBox(nullptr), _jobEngine(nullptr),
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
-	_carLot(nullptr), _junkYard(nullptr), _credits(nullptr),
+	_auction(nullptr), _carLot(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
 	_prevGameTime(0), _frameDelta(0.1f) {
 	g_engine = this;
@@ -61,6 +62,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 GearheadEngine::~GearheadEngine() {
 	delete _jobEngine;
 	delete _signIn;
+	delete _auction;
 	delete _carLot;
 	delete _junkYard;
 	delete _workShop;
@@ -257,6 +259,8 @@ void GearheadEngine::runStartup() {
 	_workShop->init();
 	progress();
 	progress(); // Catalog
+	_auction = new AuctionScreen();
+	_auction->init();
 	progress(); // Auction
 	_carLot = new CarLotScreen();
 	_carLot->init();
