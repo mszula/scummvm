@@ -140,6 +140,33 @@ Vec3 Renderer3D::light(const Vec3 &p, const Vec3 &n, const Vec3 &base, bool unli
 /** Kept between the vertex colours and the ends of the range (less than an RGB565 step) */
 static const float kColourMargin = 1.0f / 256.0f;
 
+/**
+ * TinyGL samples the pixel of a vertex at the vertex itself (not at the pixel
+ * centre inside the triangle), so a vertex on the far border of the texture
+ * (u = 1, or less than a texel past it) gets the first texel by wrapping, and
+ * one a little before the near border the last texel: a line of the wrong
+ * colour along the edge. Those coordinates are moved just inside.
+ */
+static void trimOvershoot(float (&uv)[3][2], int axis, float texel) {
+	float lo = uv[0][axis], hi = uv[0][axis];
+	for (int j = 1; j < 3; j++) {
+		lo = MIN(lo, uv[j][axis]);
+		hi = MAX(hi, uv[j][axis]);
+	}
+	const float far = ceilf(hi - texel);
+	if (far > lo + texel && hi >= far && hi - far < texel) {
+		for (int j = 0; j < 3; j++)
+			if (uv[j][axis] >= far)
+				uv[j][axis] = far - texel * 0.01f;
+	}
+	const float nearB = floorf(lo + texel);
+	if (nearB < hi - texel && lo < nearB && nearB - lo < texel) {
+		for (int j = 0; j < 3; j++)
+			if (uv[j][axis] < nearB)
+				uv[j][axis] = nearB;
+	}
+}
+
 void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::Array<const Material3D *> &materials,
                           const Common::Array<Vec3> *vertexColours) {
 	const Mat4 inv = world.inverse();
@@ -196,6 +223,12 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 			}
 		}
 
+		float uv[3][2];
+		memcpy(uv, poly.uv, sizeof(uv));
+		if (m->texture && m->texture->size > 0) {
+			trimOvershoot(uv, 0, 1.0f / m->texture->size);
+			trimOvershoot(uv, 1, 1.0f / m->texture->size);
+		}
 		Tri t;
 		t.mat = m;
 		t.depth = 0.0f;
@@ -203,8 +236,8 @@ void Renderer3D::drawMesh(const Mesh3D &mesh, const Mat4 &world, const Common::A
 		for (int j = 0; j < 3; j++) {
 			Vert &v = t.v[j];
 			v.pos = view[poly.v[j]];
-			v.u = poly.uv[j][0];
-			v.v = poly.uv[j][1];
+			v.u = uv[j][0];
+			v.v = uv[j][1];
 			const Vec3 c = m->texture ? cols[j] : cols[j].mul(m->color);
 			v.r = c.x;
 			v.g = c.y;
