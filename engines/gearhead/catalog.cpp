@@ -243,16 +243,20 @@ void CatalogScreen::onBuyPart(Button *b) {
 	const PartDef *pd = static_cast<PartButton *>(b)->_def;
 	if (!pd)
 		return;
-	Mechanic *m = g_engine->_mechanic;
 	const Common::String text = "This " + pd->name + " will cost you $" + Common::String::format("%4.2f", pd->costMax) +
 	                            ". Do you want to buy it?";
-	if (!g_engine->_msgBox->ask("Buy Part", text, kDlgButtonOk, kDlgButtonCancel))
-		return;
+	if (g_engine->_msgBox->ask("Buy Part", text, kDlgButtonOk, kDlgButtonCancel))
+		buyPart(pd);
+}
+
+bool CatalogScreen::buyPart(const PartDef *pd) {
+	Mechanic *m = g_engine->_mechanic;
 	// The price is the top price, whole dollars; the part is new
 	if (!m->pay((int)pd->costMax, true))
-		return;
+		return false;
 	if (m->_car && m->_bank)
 		m->_bank->bin.push_back(createPart(m->_car->model(), pd, 3, g_engine->_rnd));
+	return true;
 }
 
 void CatalogScreen::onBuyDecal(Button *b) {

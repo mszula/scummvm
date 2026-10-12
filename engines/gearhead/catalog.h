@@ -67,6 +67,8 @@ public:
 
 	/** Test helper: the cells of the current spread */
 	void debugDump() const;
+	/** Pays the top price and puts a new part (Perfect) in the bin */
+	bool buyPart(const PartDef *pd);
 
 	int _page;     ///< +0x34
 	int _prevPage; ///< +0x38

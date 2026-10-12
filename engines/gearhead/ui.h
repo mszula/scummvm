@@ -259,6 +259,8 @@ public:
 	bool _closeSound;
 	bool isOpen() const { return _isOpen; }
 	const Common::Rect &frameRect() const { return _frameRect; }
+	const Common::String &title() const { return _title; }
+	const Common::String &text() const { return _message; }
 
 	Common::Point _anchorLeft, _anchorRight, _anchorCenter;
 	Common::Rect _titleRect, _messageRect;

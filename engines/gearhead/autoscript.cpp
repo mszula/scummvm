@@ -28,13 +28,17 @@
 
 #include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
+#include "gearhead/car.h"
 #include "gearhead/catalog.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
+#include "gearhead/jobengine.h"
+#include "gearhead/jobs.h"
 #include "gearhead/junkyard.h"
 #include "gearhead/mechanic.h"
 #include "gearhead/paint.h"
+#include "gearhead/ui.h"
 #include "gearhead/workshop.h"
 
 namespace Gearhead {
@@ -235,6 +239,17 @@ void AutoScript::execute(const Common::String &line) {
 	} else if (cmd == "dumpauction") {
 		if (g_engine->_auction)
 			g_engine->_auction->debugDump();
+	} else if (cmd == "buypart") {
+		// Test helper: buy a part of the current car from the catalog (into the bin)
+		Mechanic *m = g_engine->_mechanic;
+		const PartDef *pd = m && m->_car ? m->_car->model()->findPart(atoi(tok.nextToken().c_str())) : nullptr;
+		if (!pd || !g_engine->_catalog->buyPart(pd))
+			warning("AutoScript: %s failed", line.c_str());
+		else
+			g_engine->_workShop->_bin.refill();
+	} else if (cmd == "campaign") {
+		_campaign = true;
+		_campaignNext = 0;
 	} else if (cmd == "log") {
 		debug("AutoScript: %s", line.substr(4).c_str());
 	} else if (cmd == "quit") {
@@ -281,10 +296,354 @@ void AutoScript::update() {
 		if (type != Action::kFrames)
 			return; // one action per frame
 	}
+	if (_campaign) {
+		if (_inStep) {
+			campaignDialogs();
+			return;
+		}
+		_inStep = true;
+		campaignStep();
+		_inStep = false;
+		return;
+	}
 	if (g_system->getMillis() < _waitUntil)
 		return;
-	while (_pc < _lines.size() && _queue.empty() && g_system->getMillis() >= _waitUntil)
+	while (_pc < _lines.size() && _queue.empty() && !_campaign && g_system->getMillis() >= _waitUntil)
 		execute(_lines[_pc++]);
+}
+
+void AutoScript::pushClick(const Widget *w) {
+	const Common::Rect &r = w->rect();
+	Action a;
+	a.type = Action::kMove;
+	a.a = (r.left + r.right) / 2;
+	a.b = (r.top + r.bottom) / 2;
+	_queue.push_back(a);
+	a.type = Action::kFrames;
+	a.a = 2;
+	_queue.push_back(a);
+	a.type = Action::kDown;
+	_queue.push_back(a);
+	a.type = Action::kFrames;
+	a.a = 3;
+	_queue.push_back(a);
+	a.type = Action::kUp;
+	_queue.push_back(a);
+}
+
+// ---------------------------------------------------------------- campaign
+
+static bool listHas(const Common::Array<int> &a, int v) {
+	for (uint i = 0; i < a.size(); i++)
+		if (a[i] == v)
+			return true;
+	return false;
+}
+
+/** The part to take off first so that @p p can come off: @p p itself or one of the parts in its way */
+static Part *findRemovable(CarInstance *car, Part *p, int depth) {
+	AssemblyError err;
+	if (car->canRemove(p, err))
+		return p;
+	if (depth > 20)
+		return nullptr;
+	for (uint i = 0; i < err.ids.size(); i++) {
+		Part *b = car->findPart(err.ids[i]);
+		if (!b)
+			b = car->findMutexPart(err.ids[i]);
+		if (b && b != p) {
+			Part *r = findRemovable(car, b, depth + 1);
+			if (r)
+				return r;
+		}
+	}
+	return nullptr;
+}
+
+bool AutoScript::campaignDialogs() {
+	Dialog *d = nullptr;
+	if (g_engine->_msgBox && g_engine->_msgBox->isOpen())
+		d = g_engine->_msgBox;
+	else if (g_engine->_jobEngine && g_engine->_jobEngine->isOpen())
+		d = g_engine->_jobEngine;
+	if (!d)
+		return false;
+	const Common::String key = d->title() + "|" + d->text();
+	if (key != _lastDialog) {
+		_lastDialog = key;
+		debug("campaign: dialog '%s' %s", d->title().c_str(), d->text().c_str());
+		if (d->title() == "No More Jobs.") {
+			_noMoreJobs = true;
+			_noMoreSkill = g_engine->_mechanic ? g_engine->_mechanic->_skillIndex : -1;
+		}
+	}
+	const uint32 now = g_system->getMillis();
+	if (now < _campaignNext)
+		return true;
+	// OK is the first button (the left one of a question)
+	if (!d->children().empty())
+		pushClick(d->children()[0]);
+	_campaignNext = now + 500;
+	return true;
+}
+
+void AutoScript::campaignStep() {
+	const uint32 now = g_system->getMillis();
+	if (now < _campaignNext)
+		return;
+	if (campaignDialogs())
+		return;
+	_lastDialog.clear();
+	Mechanic *m = g_engine->_mechanic;
+	WorkShopScreen *ws = g_engine->_workShop;
+	if (!m || !ws || g_engine->_input->root() != ws)
+		return;
+	if (m->_job) {
+		_idleSince = 0;
+		Job &job = *m->_job;
+		if (job.id != _campaignJob) {
+			_campaignJob = job.id;
+			_campaignOps = 0;
+			_completeSince = 0;
+			debug("campaign: job %d, car %d '%s', fee $%.2f, skill %d, %d jobs done", job.id, job.carId,
+			      m->_car ? m->_car->model()->_name.c_str() : "?", job.fee, m->_skillIndex, m->countCompletedJobs());
+		}
+		if (job.isComplete()) {
+			if (!_completeSince) {
+				_completeSince = now;
+				debug("campaign: job %d complete after %d operations, $%.2f of the budget left", job.id, _campaignOps, m->_cash);
+			} else if (now - _completeSince > 15000) {
+				campaignEnd("the job engine does not end the complete job");
+			}
+			return;
+		}
+		if (!solveStep(job)) {
+			campaignEnd("stuck");
+			return;
+		}
+		_campaignOps++;
+		m->updateCurrentCar(ws->_region);
+		ws->_bin.refill();
+		ws->_carView.setDirty(true);
+		_campaignNext = now + 100;
+		return;
+	}
+	int done = 0;
+	for (uint i = 0; i < g_engine->_jobs._jobs.size(); i++)
+		if (m->isJobCompleted(g_engine->_jobs._jobs[i].id))
+			done++;
+	if (done == (int)g_engine->_jobs._jobs.size()) {
+		campaignEnd("all jobs done");
+		return;
+	}
+	if (!_idleSince) {
+		_idleSince = now;
+		debug("campaign: cash $%.2f, skill %d", m->_cash, m->_skillIndex);
+	}
+	// Until the ninth job the job engine offers the next one by itself
+	if (m->_autoJobRequest)
+		return;
+	// Give the skill check (every 2 s, on the cash between jobs) the time to promote
+	if (now - _idleSince < 3000)
+		return;
+	if (_noMoreJobs) {
+		if (m->_skillIndex == _noMoreSkill) {
+			campaignEnd("no more jobs for this skill");
+			return;
+		}
+		_noMoreJobs = false;
+	}
+	pushClick(&ws->_actions._getJob);
+	_campaignNext = now + 1500;
+}
+
+bool AutoScript::buyPart(Job &job, const PartDef *pd) {
+	Mechanic *m = g_engine->_mechanic;
+	if (pd->region < 1 || pd->region > 3) {
+		debug("campaign:   %d '%s' is not in the catalog (region %d)", pd->id, pd->name.c_str(), pd->region);
+		return false;
+	}
+	if (!job.isPartAllowed(pd)) {
+		debug("campaign:   %d '%s' is a custom part, not allowed in this job", pd->id, pd->name.c_str());
+		return false;
+	}
+	if (!m->canAfford((int)pd->costMax)) {
+		debug("campaign:   cannot afford %d '%s' ($%d, cash $%.2f)", pd->id, pd->name.c_str(), (int)pd->costMax, m->_cash);
+		return false;
+	}
+	if (!g_engine->_catalog->buyPart(pd))
+		return false;
+	debug("campaign:   buy %d '%s' $%d", pd->id, pd->name.c_str(), (int)pd->costMax);
+	return true;
+}
+
+bool AutoScript::solveStep(Job &job) {
+	Mechanic *m = g_engine->_mechanic;
+	CarInstance *car = m->_car;
+	PartsBank *bank = m->_bank;
+	if (!car || !bank)
+		return false;
+	const CarModel *model = car->model();
+	// The parts the job wants installed, with their attach dependencies
+	Common::Array<int> need;
+	for (uint i = 0; i < job.completeStats.size(); i++)
+		if (job.completeStats[i].type == 0 && job.completeStats[i].condition >= 0)
+			need.push_back(job.completeStats[i].subject);
+	for (uint i = 0; i < need.size(); i++) {
+		const PartDef *pd = model->findPart(need[i]);
+		if (!pd)
+			continue;
+		for (uint k = 0; k < pd->attachDep.size() && k < 16; k++) {
+			const int dep = pd->attachDep[k];
+			if (dep < 0)
+				break;
+			if (!listHas(need, dep) && !(pd->amea && car->findMutexPart(dep)))
+				need.push_back(dep);
+		}
+	}
+	auto legal = [&job](const PartDef *pd) {
+		return pd->region >= 1 && pd->region <= 3 && job.legalModes[pd->region];
+	};
+	// A part whose place is taken by a needed (or installed) part of its mutex group
+	auto displaced = [&](const PartDef *pd) {
+		if (!pd->mutexSet || listHas(need, pd->id))
+			return false;
+		for (uint i = 0; i < need.size(); i++) {
+			const PartDef *n = model->findPart(need[i]);
+			if (n && n != pd && (n->mutexSet & pd->mutexSet))
+				return true;
+		}
+		const Part *inst = car->findMutexPart(pd->id);
+		return inst && inst->def != pd;
+	};
+	// A part from the bin that should go (back) onto the car
+	auto wanted = [&](const Part *p) {
+		if (car->isInstalled(p->def->id))
+			return false;
+		if (listHas(need, p->def->id))
+			return true;
+		if (displaced(p->def))
+			return false;
+		return !p->def->custom || p->condition == 3;
+	};
+
+	// 1. Take off the damaged parts and the parts a needed part replaces, the parts in their way first
+	Common::Array<Part *> goals;
+	for (uint i = 0; i < car->_parts.size(); i++)
+		if (car->_parts[i]->condition < 3)
+			goals.push_back(car->_parts[i]);
+	for (uint i = 0; i < need.size(); i++) {
+		if (car->isInstalled(need[i]))
+			continue;
+		Part *c = car->findMutexPart(need[i]);
+		if (c && !listHas(need, c->def->id))
+			goals.push_back(c);
+	}
+	for (uint i = 0; i < goals.size(); i++) {
+		Part *r = findRemovable(car, goals[i], 0);
+		if (!r) {
+			debug("campaign:   cannot take off %d '%s'", goals[i]->def->id, goals[i]->def->name.c_str());
+			return false;
+		}
+		if (!legal(r->def)) {
+			debug("campaign:   %d '%s' (region %d) is in a region the job locks", r->def->id, r->def->name.c_str(), r->def->region);
+			return false;
+		}
+		if (!m->removePart(r))
+			return false;
+		debug("campaign:   remove %d '%s' (condition %d)%s", r->def->id, r->def->name.c_str(), r->condition,
+		      r == goals[i] ? "" : " in the way");
+		return true;
+	}
+	// 2. Repair what goes back; a scrapped part is bought new
+	for (uint i = 0; i < bank->bin.size(); i++) {
+		Part *p = bank->bin[i];
+		if (p->condition == 3 || !wanted(p))
+			continue;
+		if (p->condition > 0) {
+			const int cost = (int)p->repairCost();
+			if (!m->canAfford(cost)) {
+				debug("campaign:   cannot afford to repair %d '%s' ($%d, cash $%.2f)", p->def->id, p->def->name.c_str(), cost, m->_cash);
+				return false;
+			}
+			m->pay(cost, false);
+			m->repairPart(p);
+			debug("campaign:   repair %d '%s' $%d", p->def->id, p->def->name.c_str(), cost);
+			return true;
+		}
+		bool spare = false;
+		for (uint k = 0; k < bank->bin.size(); k++)
+			if (k != i && bank->bin[k]->def == p->def && bank->bin[k]->condition > 0)
+				spare = true;
+		if (!spare)
+			return buyPart(job, p->def);
+	}
+	// 3. Buy the needed parts that are neither on the car nor in the bin
+	for (uint i = 0; i < need.size(); i++) {
+		if (car->isInstalled(need[i]))
+			continue;
+		bool have = false;
+		for (uint k = 0; k < bank->bin.size(); k++)
+			if (bank->bin[k]->def->id == need[i] && bank->bin[k]->condition == 3)
+				have = true;
+		if (have)
+			continue;
+		const PartDef *pd = model->findPart(need[i]);
+		if (!pd) {
+			debug("campaign:   the car has no part %d", need[i]);
+			return false;
+		}
+		return buyPart(job, pd);
+	}
+	// 4. Put the parts on
+	for (uint i = 0; i < bank->bin.size(); i++) {
+		Part *p = bank->bin[i];
+		if (p->condition != 3 || !wanted(p) || !legal(p->def))
+			continue;
+		AssemblyError err;
+		if (car->canInstall(p, err) && m->attachPart(p)) {
+			debug("campaign:   attach %d '%s'", p->def->id, p->def->name.c_str());
+			return true;
+		}
+	}
+	// 5. Complete the car
+	for (uint i = 0; i < model->_parts.size(); i++) {
+		const PartDef *pd = model->_parts[i];
+		if (pd->custom || car->isInstalled(pd->id) || !car->canAttachId(pd->id, nullptr))
+			continue;
+		for (uint k = 0; k < bank->bin.size(); k++) {
+			if (bank->bin[k]->def == pd && bank->bin[k]->condition == 3) {
+				debug("campaign:   %d '%s' (region %d) cannot be attached", pd->id, pd->name.c_str(), pd->region);
+				return false;
+			}
+		}
+		return buyPart(job, pd);
+	}
+	debug("campaign:   nothing left to do, but the job is not complete");
+	for (uint i = 0; i < job.completeStats.size(); i++) {
+		const JobStat &st = job.completeStats[i];
+		const Part *p = st.type == 0 ? car->findPart(st.subject) : nullptr;
+		debug("campaign:   stat type %d subject %d condition %d: %s", st.type, st.subject, st.condition,
+		      st.type == 0 ? (p ? Common::String::format("installed, condition %d", p->condition).c_str() : "missing")
+		                   : Common::String::format("complete %d, min condition %d", car->isComplete(st.subject), car->minCondition(st.subject)).c_str());
+	}
+	return false;
+}
+
+void AutoScript::campaignEnd(const char *why) {
+	_campaign = false;
+	Mechanic *m = g_engine->_mechanic;
+	debug("campaign: end (%s): %d jobs done, cash $%.2f, skill %d, %d cars", why, m ? m->countCompletedJobs() : 0,
+	      m ? m->_cash : 0.0f, m ? m->_skillIndex : 0, m ? m->numCars() : 0);
+	if (!m)
+		return;
+	for (uint i = 0; i < g_engine->_jobs._jobs.size(); i++) {
+		const Job &j = g_engine->_jobs._jobs[i];
+		if (m->isJobCompleted(j.id))
+			continue;
+		const CarModel *cm = g_engine->_cars.find(j.carId, false);
+		debug("campaign: left: job %d, car %d (skill %d), fee $%.2f", j.id, j.carId, cm ? cm->_minSkill : -1, j.fee);
+	}
 }
 
 } // End of namespace Gearhead
