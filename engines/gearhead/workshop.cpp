@@ -33,6 +33,7 @@
 #include "gearhead/jobs.h"
 #include "gearhead/junkyard.h"
 #include "gearhead/mechanic.h"
+#include "gearhead/paint.h"
 #include "gearhead/resources.h"
 #include "gearhead/signin.h"
 #include "gearhead/sound.h"
@@ -356,7 +357,7 @@ void EnginePane::onRefresh() {
 
 // ---------------------------------------------------------------- ToolPalette
 
-ToolPalette::ToolPalette() : _background(nullptr) {
+ToolPalette::ToolPalette() : _paintPane(new PaintPane()), _background(nullptr) {
 	setRect(385, 81, 508, 361);
 	_airRatchet.setRadio(this, 1, makeCallback(this, &ToolPalette::onAirRatchet));
 	_bodyPaint.setRadio(this, 1, makeCallback(this, &ToolPalette::onBodyPaint));
@@ -367,6 +368,7 @@ ToolPalette::ToolPalette() : _background(nullptr) {
 }
 
 ToolPalette::~ToolPalette() {
+	delete _paintPane;
 	delete _background;
 }
 
@@ -388,6 +390,7 @@ void ToolPalette::init() {
 	_camera.setPressSound(cond2);
 	_bodyPaint.setPressSound(cond2);
 	_engine.initChildren();
+	_paintPane->init();
 }
 
 static bool hasModelMesh(const CarModel *model) {
@@ -401,7 +404,7 @@ void ToolPalette::onRefresh() {
 	WorkShopScreen *ws = g_engine->_workShop;
 	Mechanic *m = g_engine->_mechanic;
 	g_engine->_gfx->blit(kPageBoth, *_background, _rect.left, _rect.top);
-	const bool sprayCan = ws->tool() == &ws->_sprayCan;
+	const bool sprayCan = ws->tool() == ws->_sprayCan;
 	const bool camera = ws->tool() == &ws->_cameraTool;
 	clearChildren();
 	_airRatchet.setStateSilently(Button::kStateUp);
@@ -433,6 +436,8 @@ void ToolPalette::onRefresh() {
 		case 2:
 			addChild(&_bodyPaint);
 			addChild(&_airRatchet);
+			if (sprayCan)
+				addChild(_paintPane);
 			if (!sprayCan) {
 				ws->setTool(&ws->_airRatchet);
 				_airRatchet.setStateSilently(Button::kStateDown);
@@ -461,14 +466,26 @@ void ToolPalette::onAirRatchet(Button *b) {
 	if (!g_engine->_mechanic->_car)
 		return;
 	ws->setTool(&ws->_airRatchet);
-	if (ws->_region == 0)
+	if (ws->_region == 2) {
+		// ToolPalette_onAirRatchet (0x4188d5): the paint pane goes away
+		_paintPane->disable();
+		_paintPane->refresh();
+		removeChild(_paintPane);
+	} else if (ws->_region == 0) {
 		_modelInPhoto.setState(Button::kStateDisabled);
+	}
 }
 
 void ToolPalette::onBodyPaint(Button *b) {
+	// ToolPalette_onBodyPaint (0x4189a7)
 	WorkShopScreen *ws = g_engine->_workShop;
-	notImplemented("Body Paint");
-	ws->setTool(&ws->_sprayCan);
+	if (!g_engine->_mechanic->_car)
+		return;
+	ws->setTool(ws->_sprayCan);
+	_paintPane->enable();
+	_paintPane->refresh();
+	removeChild(_paintPane);
+	addChild(_paintPane);
 }
 
 void ToolPalette::onCameraTool(Button *b) {
@@ -494,8 +511,8 @@ void ToolPalette::onEngineUp(Button *b) {
 
 // ---------------------------------------------------------------- WorkShopScreen
 
-WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _background(nullptr), _tool(nullptr),
-	_lastJobTick(0), _toolCursor(false) {
+WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _sprayCan(new SprayCan()), _decalBrowser(new DecalBrowser()),
+	_background(nullptr), _tool(nullptr), _lastJobTick(0), _toolCursor(false) {
 	setRect(0, 0, 640, 480);
 	_partInfo.setRect(Common::Rect(85, 345, 385, 369));
 	// WorkShop_ctor (0x41907f): child order
@@ -508,6 +525,8 @@ WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _background
 }
 
 WorkShopScreen::~WorkShopScreen() {
+	delete _decalBrowser;
+	delete _sprayCan;
 }
 
 void WorkShopScreen::init() {
@@ -518,19 +537,37 @@ void WorkShopScreen::init() {
 	_nav.init();
 	_toolPalette.init();
 	_airRatchet.init();
+	_sprayCan->init();
+	_decalBrowser->init();
 }
 
 void WorkShopScreen::setTool(Tool *tool) {
 	_tool = tool;
-	if (_toolCursor)
-		g_engine->_gfx->setCursor(_tool && _tool->_cursor ? _tool->_cursor : g_engine->_pointer, 0, 0);
+	updateToolCursor(g_engine->_input->mouse());
 }
 
 void WorkShopScreen::showToolCursor(bool show) {
 	if (show == _toolCursor)
 		return;
 	_toolCursor = show;
-	g_engine->_gfx->setCursor(show && _tool && _tool->_cursor ? _tool->_cursor : g_engine->_pointer, 0, 0);
+	if (show) {
+		updateToolCursor(g_engine->_input->mouse());
+		return;
+	}
+	g_engine->_gfx->setCursor(g_engine->_pointer, 0, 0);
+}
+
+void WorkShopScreen::updateToolCursor(const Common::Point &mouse) {
+	if (!_toolCursor)
+		return;
+	// A decal picked in the Decal Browser is dragged with the pointer whatever the tool (Pointer_startDrag)
+	Graphics::ManagedSurface *img;
+	Common::Point hot;
+	if (_sprayCan->ghostCursor(mouse, img, hot)) {
+		g_engine->_gfx->setCursor(img, hot.x, hot.y);
+		return;
+	}
+	g_engine->_gfx->setCursor(_tool && _tool->_cursor ? _tool->_cursor : g_engine->_pointer, 0, 0);
 }
 
 void WorkShopScreen::forgetCar() {
@@ -638,6 +675,10 @@ void WorkShopScreen::debugDump(const Common::String &what) {
 				debug("dump bin %d: %s cond %d at %d %d", i, b->_part->def->name.c_str(), b->_part->condition,
 				      (b->rect().left + b->rect().right) / 2, (b->rect().top + b->rect().bottom) / 2);
 		}
+		return;
+	}
+	if (what == "spray") {
+		_sprayCan->debugDump();
 		return;
 	}
 	if (!car)

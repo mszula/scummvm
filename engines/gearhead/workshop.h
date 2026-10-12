@@ -29,8 +29,11 @@
 
 namespace Gearhead {
 
+class DecalBrowser;
+class PaintPane;
 class Renderer3D;
 class Sound;
+class SprayCan;
 struct Part;
 
 /** Workshop tool (Tool, vt 0x4d04cc): the car view forwards its mouse events to the current tool */
@@ -141,7 +144,7 @@ private:
 	Sound *_tighten, *_loosen, *_attachStart, *_removeStart, *_miss;
 };
 
-/** A tool that does nothing yet (Spray Can, Camera) */
+/** A tool that does nothing yet (the camera) */
 class PlaceholderTool : public Tool {
 };
 
@@ -238,6 +241,7 @@ public:
 
 	ImageButton _airRatchet, _bodyPaint, _camera, _modelInPhoto, _startEngine;
 	EnginePane _engine;
+	PaintPane *_paintPane; ///< +0x34 of the palette (WorkShop+0xf98), owned
 
 private:
 	void onAirRatchet(Button *b);
@@ -271,6 +275,8 @@ public:
 	Tool *tool() const { return _tool; }
 	/** The cursor shows the tool while the pointer is over the view */
 	void showToolCursor(bool show);
+	/** The tool cursor for the pointer position (the Spray Can's decal ghost follows the pointer) */
+	void updateToolCursor(const Common::Point &mouse);
 	/** The current car is about to be destroyed */
 	void forgetCar();
 	/** g_PartInfoBox: name of the hovered part */
@@ -294,7 +300,9 @@ public:
 	ToolPalette _toolPalette;
 	WorkShopBackdrop _backdrop;
 	AirRatchet _airRatchet;
-	PlaceholderTool _sprayCan, _cameraTool;
+	SprayCan *_sprayCan;          ///< +0x18f0 (owned)
+	PlaceholderTool _cameraTool;
+	DecalBrowser *_decalBrowser;  ///< +0x12a8 (owned)
 	int _region;          ///< +0x18dc: 0 COMPLETE, 1 ENGINE, 2 BODY, 3 RUNNING GEAR
 	bool _modelInPhoto;   ///< +0xc72c
 

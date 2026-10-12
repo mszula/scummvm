@@ -71,6 +71,9 @@ struct AssemblyError {
 	Common::Array<int> ids;
 };
 
+/** Image_setPixelColor's RGB565 quantisation, expanded back to 8 bits per channel */
+void quantizePaint565(const Vec3 &c, byte &r, byte &g, byte &b);
+
 /** A car instance (Auto, auto.cpp) */
 class CarInstance {
 public:
@@ -81,6 +84,8 @@ public:
 
 	/** Fill the paint texture with one colour (16 bpp: quantised to RGB565 like the original) */
 	void fillPaint(const Vec3 &colour);
+	/** Image_setPixelColor on the paint texture (call _paintTexture.version++ after a stroke) */
+	void paintTexel(int x, int y, const Vec3 &colour);
 
 	/** Auto_findPart (0x43d73b) */
 	Part *findPart(int id) const;

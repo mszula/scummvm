@@ -150,6 +150,8 @@ public:
 	void sellPart(Part *part);
 	/** Mechanic_buyDecal (0x45955c): a pack of copies; owned decals stack */
 	void buyDecal(const DecalData *d);
+	/** Mechanic_useDecal (0x4594d4): one copy used; false when the last one was (the entry is deleted) */
+	bool useDecal(OwnedDecal *od);
 	/** Mechanic_updateCurrentCar (0x458ab7) */
 	void updateCurrentCar(int region);
 
@@ -186,7 +188,7 @@ public:
 	uint32 _clockTime;       ///< +0x18: game time of the last work-time update
 	uint32 _skillCheckTime;  ///< g_LastSkillCheck
 
-	Common::Array<OwnedDecal> _decals;  ///< +0x344 MECH_DECAL
+	Common::Array<OwnedDecal *> _decals; ///< +0x344 MECH_DECAL (owned)
 	Common::Array<PartsBank *> _banks;  ///< +0x380 (owned)
 	Common::Array<CarInstance *> _cars; ///< +0x360 the car lot (owned)
 	CarInstance *_car;   ///< +0x358 current car (a lot car or the job car; not owned)

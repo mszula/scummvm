@@ -101,7 +101,7 @@ public:
 	/** DecalList_layoutTwo (0x430aae): right page, then left page (whose cells come first), rows doubled */
 	void layoutTwo(const Common::Rect &left, const Common::Rect &right, ButtonCallback *onClick);
 	/** DecalList_setOwned (0x430b85) */
-	void setOwned(Common::Array<OwnedDecal> *list);
+	void setOwned(Common::Array<OwnedDecal *> *list);
 	/** DecalList_setCatalog (0x430bd9) */
 	void setCatalog(const Common::Array<DecalData *> *list);
 	/** DecalList_fillCells (0x430d0a) */
@@ -124,7 +124,7 @@ private:
 	int count() const;
 
 	Graphics::ManagedSurface *_background; ///< +0x34
-	Common::Array<OwnedDecal> *_owned;     ///< +0x38
+	Common::Array<OwnedDecal *> *_owned;   ///< +0x38
 	const Common::Array<DecalData *> *_catalog; ///< +0x3c
 	Common::Array<DecalCell *> _cells;     ///< +0x40 (owned)
 	ButtonCallback *_onClick;

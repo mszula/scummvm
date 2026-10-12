@@ -74,6 +74,12 @@ public:
 	const Mat4 &cameraWorld() const { return _cameraWorld; }
 	/** Screen position of a car-space point with the current camera (false if behind) */
 	bool project(const Vec3 &p, Common::Point &out) const;
+	/** The eased camera state (CarView+0x742 angles, +0x750 distance) */
+	const Vec3 &angles() const { return _angles; }
+	float dist() const { return _dist; }
+	const Vec3 &target() const { return _target; }
+	/** Camera zoom = 1 / tan(pi / 8) */
+	static const float kZoom;
 
 	void onHover(const Common::Point &p) override;
 	void onLDown(const Common::Point &p) override;

@@ -29,6 +29,7 @@
 #include "gearhead/input.h"
 #include "gearhead/jobs.h"
 #include "gearhead/mechanic.h"
+#include "gearhead/paint.h"
 #include "gearhead/resources.h"
 #include "gearhead/sound.h"
 #include "gearhead/workshop.h"
@@ -151,7 +152,7 @@ void CatalogScreen::activate() {
 		_page = ws->_region;
 		if (_page == 0)
 			_page = kPageBody;
-	} else if (ws->tool() == &ws->_sprayCan) {
+	} else if (ws->tool() == ws->_sprayCan) {
 		_page = kPageDecals;
 	}
 	refreshPage();
@@ -282,7 +283,7 @@ void CatalogScreen::debugDump() const {
 	}
 	const Mechanic *m = g_engine->_mechanic;
 	for (uint i = 0; i < m->_decals.size(); i++)
-		debug("dump owned decal %d x%d", m->_decals[i].id, m->_decals[i].copies);
+		debug("dump owned decal %d x%d", m->_decals[i]->id, m->_decals[i]->copies);
 }
 
 } // End of namespace Gearhead

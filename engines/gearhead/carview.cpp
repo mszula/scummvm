@@ -37,7 +37,7 @@ namespace Gearhead {
 
 static const float kPitchMin = 0.3926991f;  // pi/8
 static const float kPitchMax = 2.7488937f;  // 7pi/8
-static const float kZoom = 2.41421f;        // 1/tan(pi/8): 45 degree vertical FOV
+const float CarView::kZoom = 2.41421f;      // 1/tan(pi/8): 45 degree vertical FOV
 
 CarView::CarView() : _mouseOver(false), _inputDisabled(false), _car(nullptr), _angles(1.5707964f, 0, 0),
 	_anglesD(1.5707964f, 0, 0), _dist(18.0f), _distD(18.0f), _focus(-1), _assembled(false), _assembledColour(0),

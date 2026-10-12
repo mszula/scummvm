@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	junkyard.o \
 	mechanic.o \
 	metaengine.o \
+	paint.o \
 	partsbin.o \
 	renderer3d.o \
 	resources.o \

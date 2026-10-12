@@ -106,12 +106,27 @@ CarInstance::~CarInstance() {
 		delete _parts[i];
 }
 
+void quantizePaint565(const Vec3 &c, byte &r, byte &g, byte &b) {
+	// Image_setPixelColor (0x45121e) on a 16-bit image: trunc(c * 32 / 64 / 32) into the
+	// 5-6-5 fields (red unmasked: 1.0 overflows the 16-bit word and gives 0)
+	const int r5 = ((int)(c.x * 32.0f) << 11 & 0xffff) >> 11;
+	const int g6 = ((int)(c.y * 64.0f) << 5 & 0x7e0) >> 5;
+	const int b5 = (int)(c.z * 32.0f) & 0x1f;
+	r = (byte)(r5 << 3 | r5 >> 2);
+	g = (byte)(g6 << 2 | g6 >> 4);
+	b = (byte)(b5 << 3 | b5 >> 2);
+}
+
 void CarInstance::fillPaint(const Vec3 &colour) {
-	// Image_setPixelColor on a 16-bit image: quantise to RGB565
-	const int r5 = CLIP((int)(colour.x * 31.0f + 0.5f), 0, 31);
-	const int g6 = CLIP((int)(colour.y * 63.0f + 0.5f), 0, 63);
-	const int b5 = CLIP((int)(colour.z * 31.0f + 0.5f), 0, 31);
-	_paintTexture.fill((byte)(r5 << 3 | r5 >> 2), (byte)(g6 << 2 | g6 >> 4), (byte)(b5 << 3 | b5 >> 2));
+	byte r, g, b;
+	quantizePaint565(colour, r, g, b);
+	_paintTexture.fill(r, g, b);
+}
+
+void CarInstance::paintTexel(int x, int y, const Vec3 &colour) {
+	byte r, g, b;
+	quantizePaint565(colour, r, g, b);
+	_paintTexture.setPixel(x, y, r, g, b);
 }
 
 Part *CarInstance::findPart(int id) const {

@@ -34,6 +34,7 @@
 #include "gearhead/input.h"
 #include "gearhead/junkyard.h"
 #include "gearhead/mechanic.h"
+#include "gearhead/paint.h"
 #include "gearhead/workshop.h"
 
 namespace Gearhead {
@@ -219,6 +220,15 @@ void AutoScript::execute(const Common::String &line) {
 		// Test helper: screen positions of the car's parts / the bolts / the bin cells
 		const Common::String what = tok.nextToken();
 		g_engine->_workShop->debugDump(what);
+	} else if (cmd == "movepaint") {
+		// Test helper: the pointer to the centre of the n-th largest paint triangle on screen
+		Common::String arg = line.substr(9);
+		arg.trim();
+		Common::Point at;
+		if (g_engine->_workShop->_sprayCan->debugPaintPos(atoi(arg.c_str()), at))
+			execute(Common::String::format("move %d %d", at.x, at.y));
+		else
+			warning("AutoScript: no paint triangle %s", arg.c_str());
 	} else if (cmd == "dumpcatalog") {
 		if (g_engine->_catalog)
 			g_engine->_catalog->debugDump();

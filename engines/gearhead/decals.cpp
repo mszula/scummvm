@@ -203,7 +203,7 @@ int DecalList::count() const {
 	return _owned ? _owned->size() : 0;
 }
 
-void DecalList::setOwned(Common::Array<OwnedDecal> *list) {
+void DecalList::setOwned(Common::Array<OwnedDecal *> *list) {
 	_owned = list;
 	_catalog = nullptr;
 	_page = 0;
@@ -226,7 +226,7 @@ void DecalList::fillCells() {
 		if (_catalog)
 			_cells[k]->setData(i < (int)_catalog->size() ? (*_catalog)[i] : nullptr);
 		else
-			_cells[k]->setOwned(_owned && i < (int)_owned->size() ? &(*_owned)[i] : nullptr);
+			_cells[k]->setOwned(_owned && i < (int)_owned->size() ? (*_owned)[i] : nullptr);
 	}
 }
 
