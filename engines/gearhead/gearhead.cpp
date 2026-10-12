@@ -318,6 +318,8 @@ Common::Error GearheadEngine::run() {
 
 	ConfMan.registerDefault("fix_original_bugs", false);
 	ConfMan.registerDefault("gearhead_saves_imported", false);
+	// -PrintableSnaps: the camera also saves a picture on white
+	ConfMan.registerDefault("gearhead_printablesnaps", false);
 	_fixOriginalBugs = ConfMan.getBool("fix_original_bugs");
 	if (ConfMan.hasKey("gearhead_carid"))
 		_cmdCarId = ConfMan.getInt("gearhead_carid");

@@ -21,6 +21,7 @@ MODULE_OBJS = \
 	mechanic.o \
 	metaengine.o \
 	paint.o \
+	snapshot.o \
 	partsbin.o \
 	renderer3d.o \
 	resources.o \

@@ -203,6 +203,9 @@ public:
 	/** ImageButton_setFromSheets (0x44ec01): crop the same rect out of three full-screen sheets (owned copies) */
 	void setFromSheets(const Common::Rect &r, const Graphics::ManagedSurface &up, const Graphics::ManagedSurface &down, const Graphics::ManagedSurface &off);
 	void setPos(int x, int y);
+	Graphics::ManagedSurface *image(int i) const { return _images[i]; }
+	/** Replace one picture (not taken over) */
+	void setImage(int i, Graphics::ManagedSurface *img) { _images[i] = img; }
 
 	void onRefresh() override;
 

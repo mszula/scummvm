@@ -108,6 +108,8 @@ public:
 
 	// Mechanic profiles, one per sign-in slot (originals: Data\Mechanics\<id>.mek)
 	Common::String mechanicSaveName(int id) const;
+	/** The prefix of the engine's save files (the target) */
+	const Common::String &targetName() const { return _targetName; }
 	Common::SeekableReadStream *openMechanic(int id);
 	Common::WriteStream *createMechanic(int id);
 	void deleteMechanic(int id);

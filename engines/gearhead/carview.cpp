@@ -338,8 +338,17 @@ void CarView::render() {
 	Gfx *gfx = g_engine->_gfx;
 	if (!r3d)
 		return;
+	renderScene(_rect, Vec3(0.3f, 0.29f, 0.3f));
+	r3d->endFrame(*gfx);
+	drawOverlays();
+}
 
-	r3d->beginFrame(_rect, Vec3(0.3f, 0.29f, 0.3f));
+void CarView::renderScene(const Common::Rect &viewport, const Vec3 &clearColour) {
+	Renderer3D *r3d = g_engine->_renderer3d;
+	if (!r3d || !_car)
+		return;
+
+	r3d->beginFrame(viewport, clearColour);
 	r3d->setCamera(_cameraWorld, kZoom, 1.0f, 1000.0f);
 	r3d->setAmbient(Vec3(0.3f, 0.3f, 0.3f));
 	r3d->clearLights();
@@ -394,9 +403,11 @@ void CarView::render() {
 		}
 		r3d->drawMesh(*m, m->local, mats, &gloss);
 	}
+	debugC(3, kDebugGraphics, "CarView: %d triangles", r3d->trianglesDrawn());
+}
 
-	r3d->endFrame(*gfx);
-
+void CarView::drawOverlays() {
+	Gfx *gfx = g_engine->_gfx;
 	// Overlays (screen sprites, additive): "Use arrow keys to rotate view" and the ASSEMBLED light
 	if (!_useKeys) {
 		Resources *res = g_engine->_res;
@@ -410,7 +421,6 @@ void CarView::render() {
 		const Graphics::ManagedSurface *a = _assem[_assembledColour];
 		gfx->blitAdditive(kPageFront, *a, _rect.right - a->w, _rect.top);
 	}
-	debugC(3, kDebugGraphics, "CarView: %d triangles", r3d->trianglesDrawn());
 }
 
 void CarView::draw() {

@@ -29,6 +29,7 @@
 
 namespace Gearhead {
 
+class CameraTool;
 class DecalBrowser;
 class PaintPane;
 class Renderer3D;
@@ -144,10 +145,6 @@ private:
 	Sound *_tighten, *_loosen, *_attachStart, *_removeStart, *_miss;
 };
 
-/** A tool that does nothing yet (the camera) */
-class PlaceholderTool : public Tool {
-};
-
 /** g_WorkShopBackdrop (0x4ed960): full-screen; its hover and tick keep the workshop drawn under modal panes */
 class WorkShopBackdrop : public Widget {
 public:
@@ -252,6 +249,7 @@ private:
 	void onEngineUp(Button *b);
 
 	Graphics::ManagedSurface *_background;
+	Graphics::ManagedSurface *_modelInPhotoUp; ///< WorkShop+0x11a4: the button's own up image
 };
 
 /**
@@ -301,7 +299,7 @@ public:
 	WorkShopBackdrop _backdrop;
 	AirRatchet _airRatchet;
 	SprayCan *_sprayCan;          ///< +0x18f0 (owned)
-	PlaceholderTool _cameraTool;
+	CameraTool *_cameraTool;      ///< +0xc700 (owned)
 	DecalBrowser *_decalBrowser;  ///< +0x12a8 (owned)
 	int _region;          ///< +0x18dc: 0 COMPLETE, 1 ENGINE, 2 BODY, 3 RUNNING GEAR
 	bool _modelInPhoto;   ///< +0xc72c

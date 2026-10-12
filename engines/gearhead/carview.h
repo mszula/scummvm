@@ -66,6 +66,11 @@ public:
 
 	/** CarView_draw (0x40a7bb) */
 	void draw();
+	/**
+	 * CarView_clearRect (0x40aaec) + CarView_render3D (0x40abac): the car (and its gloss
+	 * pass) in @p viewport with the current camera; the caller ends the frame
+	 */
+	void renderScene(const Common::Rect &viewport, const Vec3 &clearColour);
 
 	/** Ray through a screen point (Ray_fromScreen), in car space */
 	void pickRay(const Common::Point &p, Vec3 &origin, Vec3 &dir) const;
@@ -94,6 +99,7 @@ public:
 
 private:
 	void render();
+	void drawOverlays();
 	void updateAssemblyLight();
 	void clampPitch();
 

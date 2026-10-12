@@ -36,6 +36,7 @@
 #include "gearhead/paint.h"
 #include "gearhead/resources.h"
 #include "gearhead/signin.h"
+#include "gearhead/snapshot.h"
 #include "gearhead/sound.h"
 #include "gearhead/workshop.h"
 
@@ -45,10 +46,6 @@ namespace Gearhead {
 static void initFromWorkshopSheets(ImageButton &b, const Common::Rect &r) {
 	Resources *res = g_engine->_res;
 	b.setFromSheets(r, *res->getImage("WorkShopUP.tga"), *res->getImage("WorkShopDN.tga"), *res->getImage("WorkShop.tga"));
-}
-
-static void notImplemented(const char *what) {
-	warning("%s is not implemented yet", what);
 }
 
 // ---------------------------------------------------------------- Tool
@@ -357,7 +354,7 @@ void EnginePane::onRefresh() {
 
 // ---------------------------------------------------------------- ToolPalette
 
-ToolPalette::ToolPalette() : _paintPane(new PaintPane()), _background(nullptr) {
+ToolPalette::ToolPalette() : _paintPane(new PaintPane()), _background(nullptr), _modelInPhotoUp(nullptr) {
 	setRect(385, 81, 508, 361);
 	_airRatchet.setRadio(this, 1, makeCallback(this, &ToolPalette::onAirRatchet));
 	_bodyPaint.setRadio(this, 1, makeCallback(this, &ToolPalette::onBodyPaint));
@@ -368,6 +365,9 @@ ToolPalette::ToolPalette() : _paintPane(new PaintPane()), _background(nullptr) {
 }
 
 ToolPalette::~ToolPalette() {
+	// The button owns its images: the up image may be the down one while Model in Photo is on
+	if (_modelInPhotoUp)
+		_modelInPhoto.setImage(0, _modelInPhotoUp);
 	delete _paintPane;
 	delete _background;
 }
@@ -381,6 +381,7 @@ void ToolPalette::init() {
 	                  res->getImage("Overlays\\CameraUP.tga"));
 	_camera.setPos(401, 165);
 	initFromWorkshopSheets(_modelInPhoto, Common::Rect(400, 236, 496, 273));
+	_modelInPhotoUp = _modelInPhoto.image(0);
 	const Graphics::ManagedSurface *ws = res->getImage("WorkShop.tga");
 	_background = new Graphics::ManagedSurface(_rect.width(), _rect.height(), ws->format);
 	_background->simpleBlitFrom(*ws, _rect, Common::Point(0, 0));
@@ -405,7 +406,7 @@ void ToolPalette::onRefresh() {
 	Mechanic *m = g_engine->_mechanic;
 	g_engine->_gfx->blit(kPageBoth, *_background, _rect.left, _rect.top);
 	const bool sprayCan = ws->tool() == ws->_sprayCan;
-	const bool camera = ws->tool() == &ws->_cameraTool;
+	const bool camera = ws->tool() == ws->_cameraTool;
 	clearChildren();
 	_airRatchet.setStateSilently(Button::kStateUp);
 	if (!m->_car)
@@ -489,14 +490,21 @@ void ToolPalette::onBodyPaint(Button *b) {
 }
 
 void ToolPalette::onCameraTool(Button *b) {
+	// ToolPalette_onCamera (0x418a29): Model in Photo is enabled when the model has one
 	WorkShopScreen *ws = g_engine->_workShop;
-	notImplemented("The camera");
-	ws->setTool(&ws->_cameraTool);
+	Mechanic *m = g_engine->_mechanic;
+	if (!m->_car)
+		return;
+	ws->setTool(ws->_cameraTool);
+	if (hasModelMesh(m->_car->model()))
+		_modelInPhoto.setState(Button::kStateUp);
 }
 
 void ToolPalette::onModelInPhoto(Button *b) {
+	// ToolPalette_onModelInPhoto (0x418a84): while on, the button shows its down image when up
 	WorkShopScreen *ws = g_engine->_workShop;
 	ws->_modelInPhoto = !ws->_modelInPhoto;
+	_modelInPhoto.setImage(0, ws->_modelInPhoto ? _modelInPhoto.image(1) : _modelInPhotoUp);
 }
 
 void ToolPalette::onEngineDown(Button *b) {
@@ -511,7 +519,8 @@ void ToolPalette::onEngineUp(Button *b) {
 
 // ---------------------------------------------------------------- WorkShopScreen
 
-WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _sprayCan(new SprayCan()), _decalBrowser(new DecalBrowser()),
+WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _sprayCan(new SprayCan()), _cameraTool(new CameraTool()),
+	_decalBrowser(new DecalBrowser()),
 	_background(nullptr), _tool(nullptr), _lastJobTick(0), _toolCursor(false) {
 	setRect(0, 0, 640, 480);
 	_partInfo.setRect(Common::Rect(85, 345, 385, 369));
@@ -526,6 +535,7 @@ WorkShopScreen::WorkShopScreen() : _region(0), _modelInPhoto(false), _sprayCan(n
 
 WorkShopScreen::~WorkShopScreen() {
 	delete _decalBrowser;
+	delete _cameraTool;
 	delete _sprayCan;
 }
 
@@ -538,6 +548,7 @@ void WorkShopScreen::init() {
 	_toolPalette.init();
 	_airRatchet.init();
 	_sprayCan->init();
+	_cameraTool->init();
 	_decalBrowser->init();
 }
 
