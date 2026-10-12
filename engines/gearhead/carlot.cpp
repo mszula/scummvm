@@ -278,6 +278,21 @@ void CarLotScreen::updateAmbient() {
 	// Quirk: the "last" times are absolute, so the next sound needs now > activation + last + delay
 	MsvcRandom &rnd = g_engine->_rnd;
 	const uint32 now = g_engine->gameTimeMs();
+	if (g_engine->fixOriginalBugs()) {
+		// Delays counted from the previous sound (or from the activation)
+		if (MAX(_activation, _lastDepart) + _departDelay < now) {
+			_lastDepart = now;
+			_departDelay = (uint32)(50000.0f + rnd.frand(40000.0f));
+			_depart->play();
+		}
+		if (MAX(_activation, _lastCrow) + _crowDelay < now) {
+			_lastCrow = now;
+			_crowDelay = (uint32)(25000.0f + rnd.frand(30000.0f));
+			_crowCount++;
+			(_crowCount % 2 == 0 ? _crow2 : _crow1)->play();
+		}
+		return;
+	}
 	if (_activation + _lastDepart + _departDelay < now) {
 		_lastDepart = now;
 		_departDelay = (uint32)(50000.0f + rnd.frand(40000.0f));
