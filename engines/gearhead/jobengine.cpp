@@ -210,7 +210,10 @@ void JobEngine::update() {
 
 void JobEngine::offerJob() {
 	Mechanic *m = g_engine->_mechanic;
-	Job *job = g_engine->_jobs.pickNext(*m, g_engine->_cars);
+	// -JobID n (n >= 1) offers that job; otherwise the cheapest one
+	Job *job = g_engine->_cmdJobId < 1 ? g_engine->_jobs.pickNext(*m, g_engine->_cars) : g_engine->_jobs.findById(g_engine->_cmdJobId);
+	if (!job && g_engine->_cmdJobId >= 1)
+		return;
 	if (!job) {
 		if (m->_id > kMechanicIdCarDev - 1)
 			return;
@@ -268,6 +271,8 @@ void JobEngine::endJob(bool success, bool silent) {
 		if (!silent)
 			m->reloadFromDisk();
 	} else {
+		if (g_engine->_cmdJobId > 0)
+			g_engine->_cmdJobId++;
 		showTabPortrait(2);
 		_tab.refresh();
 		if (m->_car)

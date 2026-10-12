@@ -54,11 +54,13 @@ class ManagedSurface;
 namespace Gearhead {
 
 class AutoScript;
+class CarLotScreen;
 class CreditsScreen;
 class Gfx;
 class Input;
 class JobEngine;
 class JukeBox;
+class JunkYardScreen;
 class Mechanic;
 class PreFabDialog;
 class Renderer3D;
@@ -124,9 +126,13 @@ public:
 	Mechanic *_mechanic;
 	PreFabDialog *_msgBox;   ///< the standard OK/Cancel message box (Mechanic+0x80)
 	JobEngine *_jobEngine;
+	/** Command line options of the original, as config keys gearhead_carid / gearhead_skill / gearhead_jobid */
+	int _cmdCarId, _cmdSkill, _cmdJobId;
 
 	SignInScreen *_signIn;
 	WorkShopScreen *_workShop;
+	CarLotScreen *_carLot;
+	JunkYardScreen *_junkYard;
 	CreditsScreen *_credits;
 
 protected:
@@ -135,6 +141,8 @@ protected:
 private:
 	void importOriginalSaves();
 	void runStartup();
+	/** CmdLine_startGame (0x44f2e9): the dev starts -CarID / -JobID, else the sign-in screen */
+	void startGame();
 	void tickTimer();
 
 	const ADGameDescription *_gameDescription;

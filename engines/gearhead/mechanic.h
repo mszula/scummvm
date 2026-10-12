@@ -49,6 +49,17 @@ enum {
 /** SkillLevel table (g_SkillTable 0x4e664c): the display clamps the index */
 const char *skillName(int index);
 
+/** SkillLevel (0x20 bytes): ranges for random cars (Auto_randomize) */
+struct SkillLevel {
+	int index;
+	const char *name;
+	float condCentre[2];   ///< +0x08
+	float condSpread[2];   ///< +0x10
+	float partFraction[2]; ///< +0x18
+};
+/** SkillLevel_get (0x45f8dc): clamped to 0..4 */
+const SkillLevel &skillLevel(int index);
+
 /** Seconds as "HH:MM:SS" (FormatDuration 0x450843, compact) */
 Common::String formatWorkTime(int seconds);
 /** Seconds as "1 hour and 2 minutes and 3 seconds" (FormatDuration, long form) */
@@ -103,9 +114,25 @@ public:
 	/** Mechanic_drawCash (0x4592e5) */
 	void drawCash() const;
 
+	// Cars
+	/** Mechanic_addNewCar (0x45898d): a random car of model @p carId (dev mechanics / tests) */
+	CarInstance *addNewCar(int carId);
+	/** Mechanic_buyCar (0x4591bf) */
+	void buyCar(CarInstance *car, float price);
+	/** Mechanic_sellCurrentCar (0x459170) */
+	void sellCurrentCar(float price);
+	/** The parts bank of a model (nullptr if none) */
+	PartsBank *findBank(int modelId) const;
+
 	// Parts
 	/** Mechanic_ensureBank (0x458b38): the bank of the car's model, created and filled once */
 	void ensureBank(CarInstance *car);
+	/** Mechanic_restockYard (0x459e1a): a few parts come and go every junkyard visit */
+	void restockYard();
+	/** Mechanic_buyYardPart (0x458f23): junkyard -> parts bin for trunc(price) */
+	bool buyYardPart(Part *part);
+	/** JunkYard_returnPart (0x42776b): refund and back to the junkyard */
+	void returnYardPart(Part *part);
 	/** Mechanic_removePart (0x459050): car -> parts bin */
 	bool removePart(Part *part);
 	/** Mechanic_attachPart (0x4590bd): parts bin -> car */
@@ -151,11 +178,12 @@ public:
 	uint32 _skillCheckTime;  ///< g_LastSkillCheck
 
 	Common::Array<PartsBank *> _banks;  ///< +0x380 (owned)
-	CarInstance *_car;   ///< +0x358 current car (not owned)
+	Common::Array<CarInstance *> _cars; ///< +0x360 the car lot (owned)
+	CarInstance *_car;   ///< +0x358 current car (a lot car or the job car; not owned)
 	Job *_job;           ///< +0x374 current job
 	PartsBank *_bank;    ///< +0x37c parts bank of the current car's model
 
-	int numCars() const { return _rawAutos.size(); }
+	int numCars() const { return _cars.size(); }
 	bool isDev() const { return _id >= kMechanicIdCarDev; }
 
 private:
@@ -163,7 +191,6 @@ private:
 	void seedBank(CarInstance *car, PartsBank *bank);
 
 	TLVChunk *_root;   ///< owns the raw chunks below
-	Common::Array<const TLVChunk *> _rawAutos;
 	Common::Array<const TLVChunk *> _rawDecals;
 };
 

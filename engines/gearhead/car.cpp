@@ -19,10 +19,13 @@
  *
  */
 
+#include "common/endian.h"
+
 #include "gearhead/car.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/random.h"
 #include "gearhead/sound.h"
+#include "gearhead/tlv.h"
 
 namespace Gearhead {
 
@@ -53,6 +56,33 @@ Part *createPart(const CarModel *model, const PartDef *def, int condition, MsvcR
 	p->modelId = model->_id;
 	p->condition = (def->special == 4) ? 3 : condition;
 	return p;
+}
+
+Part *loadPart(const TLVChunk &c) {
+	const int id = c.getInt(kTag_PART_ID, 0);
+	const int modelId = c.getInt(kTag_PART_AUTOID, 0);
+	CarModel *model = g_engine->_cars.find(modelId, true);
+	const PartDef *pd = model ? model->findPart(id) : nullptr;
+	if (!pd) {
+		warning("Tried to find non existent PartData %d of car %d", id, modelId);
+		return nullptr;
+	}
+	Part *p = new Part();
+	p->def = pd;
+	p->modelId = modelId;
+	const int cond = c.getInt(kTag_PART_CONDITION, 3);
+	p->condition = (pd->special == 4) ? 3 : cond;
+	p->wiggle = c.getFloat(kTag_PART_VALUEWIGGLE, 0.0f);
+	return p;
+}
+
+void savePart(TLVWriter &w, uint tag, const Part &p) {
+	w.begin(tag);
+	w.writeInt(kTag_PART_ID, p.def->id);
+	w.writeInt(kTag_PART_AUTOID, p.modelId);
+	w.writeInt(kTag_PART_CONDITION, p.condition);
+	w.writeFloat(kTag_PART_VALUEWIGGLE, p.wiggle);
+	w.end();
 }
 
 // ---------------------------------------------------------------- CarInstance
@@ -162,28 +192,121 @@ bool CarInstance::canAttachId(int id, AssemblyError *err) const {
 	return e.ids.empty();
 }
 
-bool CarInstance::installRandomPart(int id, int condition, int spread, bool allowCustom) {
+bool CarInstance::installRandomPart(int id, float centre, float spread, int maxParts, bool allowCustom) {
+	const float lo = MAX(0.0f, centre - spread);
+	const float hi = MIN(3.99f, centre + spread + 1.0f);
 	const PartDef *pd = _model->findPart(id);
 	if (!pd)
 		return false;
-	if (isInstalled(id))
-		return true;
-	if (pd->custom && !allowCustom)
+	if (!allowCustom && pd->custom)
 		return false;
-	if (hasMutexConflict(pd))
-		return false;
-	// Missing attach dependencies first, with the same condition
-	for (uint i = 0; i < pd->attachDep.size(); i++) {
-		if (pd->attachDep[i] < 0)
-			break;
-		if (!isInstalled(pd->attachDep[i]))
-			installRandomPart(pd->attachDep[i], condition, spread, allowCustom);
+	AssemblyError err;
+	if (!canAttachId(id, &err)) {
+		if (err.code != AssemblyError::kMissingDeps)
+			return false;
+		// Every dependency is installed again, so one that is already on the car
+		// (code 1) stops the part from being installed
+		for (uint i = 0; i < pd->attachDep.size() && pd->attachDep[i] >= 0; i++)
+			if (!installRandomPart(pd->attachDep[i], centre, spread, maxParts, allowCustom))
+				return false;
 	}
-	const float lo = MAX(0.0f, (float)(condition - spread));
-	const float hi = MIN(3.99f, (float)(condition + spread + 1));
 	const int c = (int)(lo + _rnd.frand(hi - lo));
 	_parts.push_back(createPart(_model, pd, c, _rnd));
-	return true;
+	return (int)_parts.size() < maxParts;
+}
+
+void CarInstance::randomize(float centre, float spread, float fraction) {
+	// Shuffle the PartData list: repeatedly take a random one of the remaining ones
+	Common::Array<PartDef *> remaining = _model->_parts, shuffled;
+	for (uint i = 0; i < _model->_parts.size(); i++) {
+		const int idx = (int)_rnd.frand((float)remaining.size() - 0.001f);
+		shuffled.push_back(remaining[idx]);
+		remaining.remove_at(idx);
+	}
+	int stock = 0;
+	for (uint i = 0; i < _model->_parts.size(); i++)
+		if (!_model->_parts[i]->custom)
+			stock++;
+	const int maxParts = (int)(fraction * stock);
+	for (uint i = 0; i < shuffled.size(); i++) {
+		if (shuffled[i]->custom)
+			continue;
+		installRandomPart(shuffled[i]->id, centre, spread, maxParts, false);
+		if ((int)_parts.size() >= maxParts)
+			break;
+	}
+}
+
+void CarInstance::load(const TLVChunk &c) {
+	for (uint i = 0; i < c.children().size(); i++) {
+		const TLVChunk *ch = c.children()[i];
+		switch (ch->id()) {
+		case kTag_CAR_ISTOP:
+			_isTop = ch->data().size() > 0 && ch->data()[0] != 0;
+			break;
+		case kTag_CAR_REPAIRTIME:
+			_repairTimeMs = ch->asInt();
+			break;
+		case kTag_CAR_REPAIRCOST:
+			_repairCost = ch->asFloat();
+			break;
+		case kTag_CAR_PURCHASECOST:
+			_purchaseCost = ch->asFloat();
+			break;
+		case kTag_CAR_CAREERNUM:
+			_careerNum = ch->asInt();
+			break;
+		case kTag_CAR_PART: {
+			Part *p = loadPart(*ch);
+			if (p)
+				_parts.push_back(p);
+			break;
+		}
+		case kTag_CAR_PAINTONTEX: {
+			// TagReader_readTexture replaces the random paint texture
+			_paintTexture.name = ch->getString(kTag_TEX_NAME, _paintTexture.name);
+			_paintTexture.flags = ch->getInt(kTag_TEX_FLAGS, 1);
+			const TLVChunk *bm = ch->find(kTag_TEX_BITMAP);
+			if (bm)
+				decodeTextureBitmap(*bm, _paintTexture);
+			_paintTexture.version++;
+			break;
+		}
+		default:
+			// CAR_ID was used by the caller to create the model
+			break;
+		}
+	}
+}
+
+void CarInstance::save(TLVWriter &w) const {
+	w.begin(kTag_MECH_AUTO);
+	w.writeInt(kTag_CAR_ID, _model->_id);
+	w.writeInt(kTag_CAR_ISTOP, _isTop ? 1 : 0);
+	w.writeInt(kTag_CAR_REPAIRTIME, _repairTimeMs);
+	w.writeFloat(kTag_CAR_REPAIRCOST, _repairCost);
+	w.writeFloat(kTag_CAR_PURCHASECOST, _purchaseCost);
+	w.writeInt(kTag_CAR_CAREERNUM, _careerNum);
+	for (uint i = 0; i < _parts.size(); i++)
+		savePart(w, kTag_CAR_PART, *_parts[i]);
+	// TagWriter_writeTexture: the paint texture in the display format (RGB565)
+	w.begin(kTag_CAR_PAINTONTEX);
+	w.writeString(kTag_TEX_NAME, _paintTexture.name);
+	w.writeInt(kTag_TEX_FLAGS, (int32)(_paintTexture.flags & ~2u));
+	w.begin(kTag_TEX_BITMAP);
+	w.writeInt(kTag_BITMAP_WIDTH, _paintTexture.size);
+	w.writeInt(kTag_BITMAP_HEIGHT, _paintTexture.size);
+	w.writeInt(kTag_BITMAP_FORMAT, 16);
+	Common::Array<byte> data;
+	data.resize(_paintTexture.size * _paintTexture.size * 2);
+	for (int i = 0; i < _paintTexture.size * _paintTexture.size; i++) {
+		const byte *p = &_paintTexture.rgba[i * 4];
+		WRITE_LE_UINT16(&data[i * 2], (uint16)(((p[0] >> 3) << 11) | ((p[1] >> 2) << 5) | (p[2] >> 3)));
+	}
+	w.writeBlob(kTag_BITMAP_DATA, data.data(), data.size());
+	w.end();
+	w.end();
+	w.end();
 }
 
 void CarInstance::removePartRecursive(int id) {
@@ -231,7 +354,7 @@ void CarInstance::applyStartStat(int type, int subject, int condition) {
 		Part *p = findPart(subject);
 		if (!p) {
 			if (condition >= 0)
-				installRandomPart(subject, condition, 0, true);
+				installRandomPart(subject, (float)condition, 0.0f, 999999, true);
 		} else if (condition < 0) {
 			removePartRecursive(subject);
 		} else {
@@ -242,7 +365,7 @@ void CarInstance::applyStartStat(int type, int subject, int condition) {
 			const PartDef *pd = _model->_parts[i];
 			if ((subject != 0 && pd->region != subject) || pd->special == 4 || pd->custom)
 				continue;
-			installRandomPart(pd->id, condition, 0, false);
+			installRandomPart(pd->id, (float)condition, 0.0f, 99999, false);
 			if (isComplete(subject))
 				break;
 		}

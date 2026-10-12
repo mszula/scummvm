@@ -121,13 +121,14 @@ void PartButton::drawPart(Renderer3D &r3d) {
 
 // ---------------------------------------------------------------- PartList
 
-PartList::PartList() : _onPress(nullptr), _hover(false), _showPageNumber(false), _cols(1), _rows(1), _page(0), _lastPage(0) {
+PartList::PartList() : _onClick(nullptr), _onPress(nullptr), _hover(false), _showPageNumber(false), _cols(1), _rows(1), _page(0), _lastPage(0) {
 }
 
 PartList::~PartList() {
 	for (uint i = 0; i < _buttons.size(); i++)
 		delete _buttons[i];
 	delete _onPress;
+	delete _onClick;
 }
 
 void PartList::onButtonPress(Button *b) {
@@ -135,10 +136,17 @@ void PartList::onButtonPress(Button *b) {
 		(*_onPress)(b);
 }
 
-void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onPress) {
+void PartList::onButtonClick(Button *b) {
+	if (_onClick)
+		(*_onClick)(b);
+}
+
+void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onClick, ButtonCallback *onPress) {
 	_rect = r;
 	delete _onPress;
 	_onPress = onPress;
+	delete _onClick;
+	_onClick = onClick;
 	_cols = cols;
 	_rows = rows;
 	const int cellW = (int)((double)(r.width() - (cols + 1) * gap) / cols);
@@ -150,6 +158,7 @@ void PartList::layoutGrid(const Common::Rect &r, int cols, int rows, int gap, Bu
 		b->setRect(x, y, x + cellW, y + cellH);
 		b->_tag = i;
 		b->setOnPress(makeCallback(this, &PartList::onButtonPress));
+		b->setOnClick(makeCallback(this, &PartList::onButtonClick));
 		_buttons.push_back(b);
 		addChild(b);
 		x += cellW + gap;
@@ -283,7 +292,7 @@ PartsBin::PartsBin() : _pageSound(nullptr) {
 	_repair.setRect(_repairRect.left, _repairRect.top, _repairRect.right, _repairRect.bottom);
 	_scrap.setRect(_scrapRect.left, _scrapRect.top, _scrapRect.right, _scrapRect.bottom);
 	// PartsBin_initList (0x416c2e)
-	_list.layoutGrid(Common::Rect(5, 370, 385, 475), 4, 2, 2, makeCallback(this, &PartsBin::onDragPart));
+	_list.layoutGrid(Common::Rect(5, 370, 385, 475), 4, 2, 2, nullptr, makeCallback(this, &PartsBin::onDragPart));
 	_list._showPageNumber = true;
 	_list._pageNumber.setRect(Common::Rect(390, 413, 410, 433));
 }

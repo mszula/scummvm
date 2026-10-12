@@ -190,6 +190,11 @@ const Material3D *conditionHighlight(int condition);
 /** CondLevel +0x08 status colour (16-bit modes) */
 Vec3 conditionColour(int condition);
 
+/** TEX_BITMAP -> square power-of-two RGBA texture (bilinear resample when needed) */
+void decodeTextureBitmap(const TLVChunk &bm, Texture3D &tex);
+/** Texture_makePow2 (0x465030): RGBA pixels -> square power of two, at most 256 */
+void textureFromRGBA(int w, int h, const Common::Array<byte> &rgba, Texture3D &tex);
+
 /** TLV bitmap (TEX_BITMAP, JOBPHASEIMAGE, DD_IMAGE) converted to a 2D surface */
 Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics::PixelFormat &format);
 

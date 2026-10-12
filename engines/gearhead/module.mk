@@ -6,6 +6,7 @@ MODULE_OBJS = \
 	autoscript.o \
 	car.o \
 	cardata.o \
+	carlot.o \
 	carview.o \
 	font.o \
 	gearhead.o \
@@ -13,16 +14,19 @@ MODULE_OBJS = \
 	input.o \
 	jobengine.o \
 	jobs.o \
+	junkyard.o \
 	mechanic.o \
 	metaengine.o \
 	partsbin.o \
 	renderer3d.o \
 	resources.o \
+	scene3ds.o \
 	screens.o \
 	signin.o \
 	sound.o \
 	tlv.o \
 	ui.o \
+	walkabout.o \
 	workshop.o
 
 # This module can be built as a plugin

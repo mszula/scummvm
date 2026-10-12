@@ -20,6 +20,7 @@
  */
 
 #include "common/debug.h"
+#include "common/file.h"
 #include "common/fs.h"
 #include "common/stream.h"
 #include "common/system.h"
@@ -29,6 +30,8 @@
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
+#include "gearhead/junkyard.h"
+#include "gearhead/mechanic.h"
 #include "gearhead/workshop.h"
 
 namespace Gearhead {
@@ -166,6 +169,50 @@ void AutoScript::execute(const Common::String &line) {
 			warning("AutoScript: %s %d not found on screen", cmd.c_str(), n);
 		else
 			execute(Common::String::format("click %d %d", p.x, p.y));
+	} else if (cmd == "savemech" || cmd == "reloadmech") {
+		// Test helpers: write the mechanic's .mek to a host file / save and load it back
+		Mechanic *m = g_engine->_mechanic;
+		if (!m) {
+			warning("AutoScript: no mechanic");
+		} else if (cmd == "savemech") {
+			Common::String path = line.substr(8);
+			path.trim();
+			Common::DumpFile f;
+			if (f.open(Common::Path(path, '/'), true))
+				m->save(f);
+			else
+				warning("AutoScript: cannot write %s", path.c_str());
+		} else {
+			m->saveToDisk();
+			m->reloadFromDisk();
+			g_engine->_workShop->activate();
+		}
+	} else if (cmd == "givecar") {
+		// Test helper: a random car of model N (Mechanic_addNewCar, the dev-mode path)
+		const int id = atoi(tok.nextToken().c_str());
+		if (g_engine->_mechanic && g_engine->_mechanic->addNewCar(id))
+			g_engine->_workShop->activate();
+		else
+			warning("AutoScript: givecar %d failed", id);
+	} else if (cmd == "clickitem" || cmd == "dumpyard") {
+		// Test helpers for the junkyard: list / click the parts on the shelves of the current area
+		Common::Point p;
+		Common::String name;
+		if (cmd == "dumpyard") {
+			for (int i = 0; i < 64; i++) {
+				const bool ok = g_engine->_junkYard->_yard.debugItemScreenPos(i, p, name);
+				if (name.empty())
+					break;
+				debug("dump item %d '%s' %s %d %d", i, name.c_str(), ok ? "at" : "hidden", p.x, p.y);
+				name.clear();
+			}
+		} else {
+			const int n = atoi(tok.nextToken().c_str());
+			if (g_engine->_junkYard->_yard.debugItemScreenPos(n, p, name))
+				execute(Common::String::format("click %d %d", p.x, p.y));
+			else
+				warning("AutoScript: shelf item %d not found on screen", n);
+		}
 	} else if (cmd == "dump") {
 		// Test helper: screen positions of the car's parts / the bolts / the bin cells
 		const Common::String what = tok.nextToken();

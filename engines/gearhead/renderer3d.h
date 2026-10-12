@@ -87,6 +87,11 @@ public:
 	 * so the quad is drawn over the geometry around it.
 	 */
 	void drawBillboard(const Vec3 &pos, float halfSize, float depthBias, const Material3D *mat);
+	/**
+	 * DrawSprite (device slot 42): a textured screen rectangle @p r (screen pixels)
+	 * at view depth @p depth, white vertex colour
+	 */
+	void drawScreenQuad(const Common::Rect &r, float u0, float v0, float u1, float v1, const Material3D *mat, float depth);
 	/** Scene(1): draw the deferred translucent polygons now (next layer) */
 	void flushTranslucent();
 	/** Draw the deferred translucent polygons and copy the viewport to the front page */
@@ -109,7 +114,14 @@ private:
 	Vec3 light(const Vec3 &p, const Vec3 &n, const Vec3 &base, bool unlit,
 	           const Common::Array<Light3D> &objLights) const;
 	void bindMaterial(const Material3D *m);
+	/** Queue a triangle; consecutive triangles of one material go out in one tglBegin/tglEnd */
 	void emit(const Tri &t);
+	/**
+	 * Send the queued batch to TinyGL. Every ~30000 vertices the TinyGL draw
+	 * calls are executed (presentBuffer) so that their memory stays bounded
+	 * however big the scene is.
+	 */
+	void flushBatch();
 	uint32 textureId(Texture3D *t);
 
 	bool _initialized;
@@ -123,6 +135,9 @@ private:
 	Common::Array<Tri> _deferred;
 	const Material3D *_bound;
 	int _triangles;
+	Common::Array<Tri> _batch;
+	const Material3D *_batchMat;
+	uint _pendingVerts;
 
 	struct TexEntry {
 		uint32 id;

@@ -29,6 +29,8 @@
 namespace Gearhead {
 
 class MsvcRandom;
+class TLVChunk;
+class TLVWriter;
 
 /**
  * One physical part (Part, 0x18 bytes). Parts move between a car, the
@@ -51,6 +53,10 @@ struct Part {
 
 /** Part_ctor (0x438590): random wiggle, then Part_init (special 4 parts are always perfect) */
 Part *createPart(const CarModel *model, const PartDef *def, int condition, MsvcRandom &rnd);
+/** Part_load (0x438664): the condition defaults to 3; nullptr if the PartData does not exist */
+Part *loadPart(const TLVChunk &c);
+/** Part_save (0x438753) as list @p tag */
+void savePart(TLVWriter &w, uint tag, const Part &p);
 
 /** Mechanic+0x34 (PartCheckResult): why a part cannot be attached or removed */
 struct AssemblyError {
@@ -90,8 +96,15 @@ public:
 	/** Auto_canAttachId (0x43d87e) */
 	bool canAttachId(int id, AssemblyError *err) const;
 
-	/** Auto_installRandomPart (0x43db0c): the part and, recursively, its missing attach dependencies */
-	bool installRandomPart(int id, int condition, int spread, bool allowCustom);
+	/**
+	 * Auto_installRandomPart (0x43db0c): install a part in random condition around
+	 * @p centre; if only attach dependencies are missing, every dependency is
+	 * installed first (quirk: an already installed one aborts). Returns
+	 * "more parts wanted" (count < maxParts).
+	 */
+	bool installRandomPart(int id, float centre, float spread, int maxParts, bool allowCustom);
+	/** Auto_randomize (0x43dcc2): a shuffled fraction of the stock parts */
+	void randomize(float centre, float spread, float fraction);
 	/** Auto_removePartRecursive (0x43deef) */
 	void removePartRecursive(int id);
 	/** JobStat_apply (0x448e10) for one start stat */
@@ -109,6 +122,11 @@ public:
 	void setPartMaterial(const Part *part, const Material3D *mat);
 	/** Mesh index of a part's PD_MESHNAME (-1 if the model has none) */
 	int partMesh(const PartDef *pd) const { return pd ? pd->meshIndex : -1; }
+
+	/** Auto_load (0x43cf96) from a MECH_AUTO list; the model is created by the caller */
+	void load(const TLVChunk &c);
+	/** Auto_save (0x43d210) as MECH_AUTO */
+	void save(TLVWriter &w) const;
 
 	/** Auto_tryStart (0x43e5d4) */
 	void tryStart();

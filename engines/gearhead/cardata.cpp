@@ -128,15 +128,7 @@ Graphics::ManagedSurface *decodeBitmapSurface(const TLVChunk &bm, const Graphics
 	return s;
 }
 
-/** TEX_BITMAP -> square power-of-two RGBA (bilinear resample when needed) */
-static void decodeBitmap(const TLVChunk &bm, Texture3D &tex) {
-	int w, h;
-	Common::Array<byte> src;
-	if (!decodeBitmapPixels(bm, w, h, src)) {
-		tex.create(1);
-		return;
-	}
-
+void textureFromRGBA(int w, int h, const Common::Array<byte> &src, Texture3D &tex) {
 	const int size = MIN<int>(MAX(pow2Floor(w), pow2Floor(h)), kMaxTextureSize);
 	tex.create(size);
 	if (size == w && size == h) {
@@ -151,13 +143,24 @@ static void decodeBitmap(const TLVChunk &bm, Texture3D &tex) {
 			const float fx = MAX(0.0f, (x + 0.5f) * w / size - 0.5f);
 			const int x0 = MIN<int>((int)fx, w - 1), x1 = MIN(x0 + 1, w - 1);
 			const float tx = fx - x0;
-			for (int c = 0; c < 3; c++) {
+			for (int c = 0; c < 4; c++) {
 				const float a = src[(y0 * w + x0) * 4 + c] * (1 - tx) + src[(y0 * w + x1) * 4 + c] * tx;
 				const float b = src[(y1 * w + x0) * 4 + c] * (1 - tx) + src[(y1 * w + x1) * 4 + c] * tx;
 				tex.rgba[(y * size + x) * 4 + c] = (byte)(a * (1 - ty) + b * ty + 0.5f);
 			}
 		}
 	}
+	tex.version++;
+}
+
+void decodeTextureBitmap(const TLVChunk &bm, Texture3D &tex) {
+	int w, h;
+	Common::Array<byte> src;
+	if (!decodeBitmapPixels(bm, w, h, src)) {
+		tex.create(1);
+		return;
+	}
+	textureFromRGBA(w, h, src, tex);
 }
 
 // ---------------------------------------------------------------- Material3D
@@ -317,7 +320,7 @@ bool CarModel::load(Resources &res) {
 			t->flags = c.getInt(kTag_TEX_FLAGS, 1);
 			const TLVChunk *bm = c.find(kTag_TEX_BITMAP);
 			if (bm)
-				decodeBitmap(*bm, *t);
+				decodeTextureBitmap(*bm, *t);
 			else
 				t->create(1);
 			_textures.push_back(t);

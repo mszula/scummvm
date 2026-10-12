@@ -29,10 +29,12 @@
 #include "graphics/managed_surface.h"
 
 #include "gearhead/autoscript.h"
+#include "gearhead/carlot.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
 #include "gearhead/jobengine.h"
+#include "gearhead/junkyard.h"
 #include "gearhead/mechanic.h"
 #include "gearhead/renderer3d.h"
 #include "gearhead/resources.h"
@@ -48,7 +50,9 @@ GearheadEngine *g_engine;
 
 GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _res(nullptr), _gfx(nullptr), _input(nullptr), _snd(nullptr), _jukebox(nullptr),
-	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _msgBox(nullptr), _jobEngine(nullptr), _signIn(nullptr), _workShop(nullptr), _credits(nullptr),
+	_script(nullptr), _renderer3d(nullptr), _pointer(nullptr), _mechanic(nullptr), _msgBox(nullptr), _jobEngine(nullptr),
+	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
+	_carLot(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
 	_prevGameTime(0), _frameDelta(0.1f) {
 	g_engine = this;
@@ -57,6 +61,8 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 GearheadEngine::~GearheadEngine() {
 	delete _jobEngine;
 	delete _signIn;
+	delete _carLot;
+	delete _junkYard;
 	delete _workShop;
 	delete _credits;
 	delete _mechanic;
@@ -252,7 +258,11 @@ void GearheadEngine::runStartup() {
 	progress();
 	progress(); // Catalog
 	progress(); // Auction
+	_carLot = new CarLotScreen();
+	_carLot->init();
 	progress(); // CarLot
+	_junkYard = new JunkYardScreen();
+	_junkYard->init();
 	progress(); // JunkYard
 	_signIn = new SignInScreen();
 	_signIn->init();
@@ -266,7 +276,29 @@ void GearheadEngine::runStartup() {
 
 	_res->purge();
 	debugC(1, kDebugGame, "Entering main loop..");
-	_signIn->activate(true);
+	startGame();
+}
+
+void GearheadEngine::startGame() {
+	if (_cmdCarId >= 0) {
+		// "CarDev": $50000, the chosen skill, one random car of the model, no jobs
+		_mechanic = new Mechanic();
+		_mechanic->init("CarDev", kMechanicIdCarDev, 50000.0f, CLIP(_cmdSkill, 0, 4));
+		_mechanic->addNewCar(_cmdCarId);
+		_mechanic->_car = _mechanic->_cars.empty() ? nullptr : _mechanic->_cars[0];
+		_mechanic->_autoJobRequest = false;
+		_mechanic->_clockTime = gameTimeMs();
+		_workShop->activate();
+	} else if (_cmdJobId >= 0) {
+		// "JobDev": $100 and job n offered at once (0 = the normal choice)
+		_mechanic = new Mechanic();
+		_mechanic->init("JobDev", kMechanicIdJobDev, 100.0f, CLIP(_cmdSkill, 0, 4));
+		_mechanic->_clockTime = gameTimeMs();
+		_workShop->activate();
+		_jobEngine->offerJob();
+	} else {
+		_signIn->activate(true);
+	}
 }
 
 Common::Error GearheadEngine::run() {
@@ -278,6 +310,12 @@ Common::Error GearheadEngine::run() {
 	ConfMan.registerDefault("fix_original_bugs", false);
 	ConfMan.registerDefault("gearhead_saves_imported", false);
 	_fixOriginalBugs = ConfMan.getBool("fix_original_bugs");
+	if (ConfMan.hasKey("gearhead_carid"))
+		_cmdCarId = ConfMan.getInt("gearhead_carid");
+	if (ConfMan.hasKey("gearhead_skill"))
+		_cmdSkill = ConfMan.getInt("gearhead_skill");
+	if (ConfMan.hasKey("gearhead_jobid"))
+		_cmdJobId = ConfMan.getInt("gearhead_jobid");
 
 	_startTime = g_system->getMillis();
 	// srand(GetTickCount()); a fixed seed can be set for reproducible runs

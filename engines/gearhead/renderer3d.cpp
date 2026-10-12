@@ -29,7 +29,8 @@
 
 namespace Gearhead {
 
-Renderer3D::Renderer3D() : _initialized(false), _zoom(1.0f), _aspect(1.0f), _far(1000.0f), _bound(nullptr), _triangles(0) {
+Renderer3D::Renderer3D() : _initialized(false), _zoom(1.0f), _aspect(1.0f), _far(1000.0f), _bound(nullptr), _triangles(0),
+	_batchMat(nullptr), _pendingVerts(0) {
 }
 
 Renderer3D::~Renderer3D() {
@@ -43,7 +44,7 @@ Renderer3D::~Renderer3D() {
 }
 
 bool Renderer3D::init(const Graphics::PixelFormat &format) {
-	TinyGL::createContext(kScreenWidth, kScreenHeight, format, kMaxTextureSize, false, false);
+	TinyGL::createContext(kScreenWidth, kScreenHeight, format, kMaxTextureSize, false, false, 8 * 1024 * 1024);
 	tglDisable(TGL_LIGHTING);
 	tglDisable(TGL_CULL_FACE); // culling uses the stored face normals (done here)
 	tglEnable(TGL_DEPTH_TEST);
@@ -55,6 +56,7 @@ bool Renderer3D::init(const Graphics::PixelFormat &format) {
 }
 
 void Renderer3D::beginFrame(const Common::Rect &viewport, const Vec3 &clearColour) {
+	flushBatch();
 	_viewport = viewport;
 	_deferred.clear();
 	_bound = nullptr;
@@ -68,11 +70,13 @@ void Renderer3D::beginFrame(const Common::Rect &viewport, const Vec3 &clearColou
 }
 
 void Renderer3D::setViewport(const Common::Rect &viewport) {
+	flushBatch();
 	_viewport = viewport;
 	tglViewport(viewport.left, kScreenHeight - viewport.bottom, viewport.width(), viewport.height());
 }
 
 void Renderer3D::setCamera(const Mat4 &cameraWorld, float zoom, float nearZ, float farZ, float aspectMul) {
+	flushBatch();
 	_view = cameraWorld.inverse();
 	_cameraPos = cameraWorld.row(3);
 
@@ -245,6 +249,52 @@ void Renderer3D::drawBillboard(const Vec3 &pos, float halfSize, float depthBias,
 	}
 }
 
+void Renderer3D::drawScreenQuad(const Common::Rect &r, float u0, float v0, float u1, float v1, const Material3D *mat, float depth) {
+	// A sprite at (or near) the far plane is a background: drawn without depth test or write
+	const bool background = depth >= _far * 0.9f;
+	const float z = background ? _zoom * 2.0f : MAX(depth, _zoom * 1.001f);
+	const float vw = (float)_viewport.width(), vh = (float)_viewport.height();
+	const float xs[2] = { (r.left - _viewport.left) / vw * 2.0f - 1.0f, (r.right - _viewport.left) / vw * 2.0f - 1.0f };
+	const float ys[2] = { 1.0f - (r.top - _viewport.top) / vh * 2.0f, 1.0f - (r.bottom - _viewport.top) / vh * 2.0f };
+	const float us[2] = { u0, u1 }, vs[2] = { v0, v1 };
+	static const int kCorner[4][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
+	static const int kIdx[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
+	if (background) {
+		flushBatch();
+		bindMaterial(mat);
+		tglDisable(TGL_DEPTH_TEST);
+		tglDepthMask(TGL_FALSE);
+	}
+	for (int k = 0; k < 2; k++) {
+		Tri t;
+		t.mat = mat;
+		t.depth = z;
+		for (int j = 0; j < 3; j++) {
+			const int *cn = kCorner[kIdx[k][j]];
+			Vert &o = t.v[j];
+			o.pos = Vec3(xs[cn[0]] * _aspect * z / _zoom, ys[cn[1]] * z / _zoom, z);
+			o.u = us[cn[0]];
+			o.v = vs[cn[1]];
+			o.r = o.g = o.b = 1.0f;
+			o.a = mat->shadeAlpha == 1 ? mat->alpha : 1.0f;
+		}
+		if (background) {
+			emit(t);
+			continue;
+		}
+		if (mat->translucent())
+			_deferred.push_back(t);
+		else
+			emit(t);
+	}
+	if (background) {
+		flushBatch();
+		tglEnable(TGL_DEPTH_TEST);
+		tglDepthMask(mat->translucent() ? TGL_FALSE : TGL_TRUE);
+		_bound = nullptr;
+	}
+}
+
 static TGLenum blendFactor(int f) {
 	switch (f) {
 	case 0: return TGL_ZERO;
@@ -308,16 +358,33 @@ void Renderer3D::bindMaterial(const Material3D *m) {
 }
 
 void Renderer3D::emit(const Tri &t) {
-	bindMaterial(t.mat);
+	if (t.mat != _batchMat)
+		flushBatch();
+	_batchMat = t.mat;
+	_batch.push_back(t);
+}
+
+void Renderer3D::flushBatch() {
+	if (_batch.empty())
+		return;
+	bindMaterial(_batchMat);
 	tglBegin(TGL_TRIANGLES);
-	for (int j = 0; j < 3; j++) {
-		const Vert &v = t.v[j];
-		tglColor4f(v.r, v.g, v.b, v.a);
-		tglTexCoord2f(v.u, v.v);
-		tglVertex3f(v.pos.x, v.pos.y, v.pos.z);
+	for (uint i = 0; i < _batch.size(); i++) {
+		for (int j = 0; j < 3; j++) {
+			const Vert &v = _batch[i].v[j];
+			tglColor4f(v.r, v.g, v.b, v.a);
+			tglTexCoord2f(v.u, v.v);
+			tglVertex3f(v.pos.x, v.pos.y, v.pos.z);
+		}
 	}
 	tglEnd();
-	_triangles++;
+	_triangles += _batch.size();
+	_pendingVerts += _batch.size() * 3;
+	_batch.clear();
+	if (_pendingVerts > 30000) {
+		TinyGL::presentBuffer();
+		_pendingVerts = 0;
+	}
 }
 
 void Renderer3D::flushTranslucent() {
@@ -326,14 +393,17 @@ void Renderer3D::flushTranslucent() {
 	for (uint i = 0; i < _deferred.size(); i++)
 		order.push_back(&_deferred[i]);
 	Common::sort(order.begin(), order.end(), [](const Tri *a, const Tri *b) { return a->depth > b->depth; });
+	flushBatch();
 	for (uint i = 0; i < order.size(); i++)
 		emit(*order[i]);
+	flushBatch();
 	_deferred.clear();
 }
 
 void Renderer3D::endFrame(Gfx &gfx) {
 	flushTranslucent();
 	TinyGL::presentBuffer();
+	_pendingVerts = 0;
 	Graphics::Surface buffer;
 	TinyGL::getSurfaceRef(buffer);
 	Graphics::ManagedSurface &front = gfx.front();

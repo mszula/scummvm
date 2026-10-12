@@ -57,8 +57,8 @@ public:
 	PartList();
 	~PartList() override;
 
-	/** PartList_layoutGrid (0x43af91) */
-	void layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onPress);
+	/** PartList_layoutGrid (0x43af91): cell callbacks cbA (click) and cbB (press) */
+	void layoutGrid(const Common::Rect &r, int cols, int rows, int gap, ButtonCallback *onClick, ButtonCallback *onPress);
 	void clearItems() { _items.clear(); }
 	void addPart(Part *p) { _items.push_back(p); }
 	/** PartList_refresh (0x43b213) */
@@ -76,7 +76,8 @@ public:
 
 	bool listDirty() const { return isDirty(); }
 	void setListDirty(bool d) { setDirty(d); }
-	/** The press callback shared by all cells (the drag of the parts bin) */
+	/** The callbacks shared by all cells (bin: press = drag; junkyard cart: click = return) */
+	ButtonCallback *_onClick;
 	ButtonCallback *_onPress;
 
 	/** PartList_vslot11: the pointer is over the list */
@@ -88,6 +89,7 @@ public:
 
 private:
 	void onButtonPress(Button *b);
+	void onButtonClick(Button *b);
 	void drawConditionCorner(const PartButton &b);
 	void drawButtonFrame(const PartButton &b);
 

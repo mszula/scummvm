@@ -31,9 +31,20 @@
 
 namespace Gearhead {
 
+static const SkillLevel kSkillTable[5] = {
+	{ 0, "Learning", { 3.0f, 3.0f }, { 0.0f, 0.0f }, { 0.95f, 1.00f } },
+	{ 1, "Novice", { 2.0f, 3.0f }, { 1.0f, 2.0f }, { 0.85f, 0.90f } },
+	{ 2, "Handy", { 0.0f, 3.0f }, { 0.0f, 2.0f }, { 0.75f, 0.85f } },
+	{ 3, "Expert", { 0.0f, 2.0f }, { 0.0f, 1.0f }, { 0.30f, 0.60f } },
+	{ 4, "God-like", { 0.0f, 1.0f }, { 0.0f, 1.0f }, { 0.05f, 0.30f } }
+};
+
+const SkillLevel &skillLevel(int index) {
+	return kSkillTable[CLIP(index, 0, 4)];
+}
+
 const char *skillName(int index) {
-	static const char *const kSkills[5] = { "Learning", "Novice", "Handy", "Expert", "God-like" };
-	return kSkills[CLIP(index, 0, 4)];
+	return skillLevel(index).name;
 }
 
 Common::String formatWorkTime(int seconds) {
@@ -63,35 +74,6 @@ PartsBank::~PartsBank() {
 		delete yard[i];
 	for (uint i = 0; i < bin.size(); i++)
 		delete bin[i];
-}
-
-/** Part_load (0x438664): the condition defaults to 3 */
-static Part *loadPart(const TLVChunk &c) {
-	const int id = c.getInt(kTag_PART_ID, 0);
-	const int modelId = c.getInt(kTag_PART_AUTOID, 0);
-	CarModel *model = g_engine->_cars.find(modelId, true);
-	const PartDef *pd = model ? model->findPart(id) : nullptr;
-	if (!pd) {
-		warning("Tried to find non existent PartData %d of car %d", id, modelId);
-		return nullptr;
-	}
-	Part *p = new Part();
-	p->def = pd;
-	p->modelId = modelId;
-	const int cond = c.getInt(kTag_PART_CONDITION, 3);
-	p->condition = (pd->special == 4) ? 3 : cond;
-	p->wiggle = c.getFloat(kTag_PART_VALUEWIGGLE, 0.0f);
-	return p;
-}
-
-/** Part_save (0x438753) */
-static void savePart(TLVWriter &w, uint tag, const Part &p) {
-	w.begin(tag);
-	w.writeInt(kTag_PART_ID, p.def->id);
-	w.writeInt(kTag_PART_AUTOID, p.modelId);
-	w.writeInt(kTag_PART_CONDITION, p.condition);
-	w.writeFloat(kTag_PART_VALUEWIGGLE, p.wiggle);
-	w.end();
 }
 
 bool PartsBank::load(const TLVChunk &c) {
@@ -151,7 +133,9 @@ void Mechanic::clear() {
 		delete _banks[i];
 	_banks.clear();
 	_bank = nullptr;
-	_rawAutos.clear();
+	for (uint i = 0; i < _cars.size(); i++)
+		delete _cars[i];
+	_cars.clear();
 	_rawDecals.clear();
 	delete _root;
 	_root = nullptr;
@@ -217,9 +201,18 @@ bool Mechanic::load(Common::SeekableReadStream &stream) {
 			_banks.push_back(b);
 			break;
 		}
-		case kTag_MECH_AUTO:
-			_rawAutos.push_back(c);
+		case kTag_MECH_AUTO: {
+			// Auto_load: the model comes from CAR_ID (looked up first)
+			CarModel *model = g_engine->_cars.find(c->getInt(kTag_CAR_ID, -1), true);
+			if (!model) {
+				warning("Couldn't find Auto with ModelNumber == %d", c->getInt(kTag_CAR_ID, -1));
+				break;
+			}
+			CarInstance *car = new CarInstance(model, g_engine->_rnd);
+			car->load(*c);
+			_cars.push_back(car);
 			break;
+		}
 		case kTag_MECH_DECAL:
 			_rawDecals.push_back(c);
 			break;
@@ -238,6 +231,16 @@ bool Mechanic::load(Common::SeekableReadStream &stream) {
 			break;
 		}
 	}
+	// The current car is the one with careerNum == MECH_LASTAUTONUM, the bank that of its model
+	if (_lastAutoNum >= 0) {
+		for (uint i = 0; i < _cars.size(); i++) {
+			if (_cars[i]->_careerNum == _lastAutoNum) {
+				_car = _cars[i];
+				_bank = findBank(_car->model()->_id);
+				break;
+			}
+		}
+	}
 	return true;
 }
 
@@ -253,12 +256,12 @@ bool Mechanic::save(Common::WriteStream &stream) const {
 	w.writeInt(kTag_MECH_TOTALCAREERAUTOS, _totalCareerAutos);
 	w.writeInt(kTag_MECH_TOTALWORKTIME, _totalWorkTime);
 	// Only written with a current car and no active job
-	if (_lastAutoNum >= 0 && !_job)
-		w.writeInt(kTag_MECH_LASTAUTONUM, _lastAutoNum);
+	if (_car && !_job)
+		w.writeInt(kTag_MECH_LASTAUTONUM, _car->_careerNum);
 	for (uint i = 0; i < _banks.size(); i++)
 		_banks[i]->save(w);
-	for (uint i = 0; i < _rawAutos.size(); i++)
-		w.writeChunk(*_rawAutos[i]);
+	for (uint i = 0; i < _cars.size(); i++)
+		_cars[i]->save(w);
 	for (uint i = 0; i < _rawDecals.size(); i++)
 		w.writeChunk(*_rawDecals[i]);
 	w.begin(kTag_MECH_COMPLETEDJOBS);
@@ -331,15 +334,65 @@ void Mechanic::drawCash() const {
 	          kAlignEnd, kAlignCenter, kKeyDefault, kPageFront);
 }
 
+// ---------------------------------------------------------------- cars
+
+CarInstance *Mechanic::addNewCar(int carId) {
+	CarModel *model = g_engine->_cars.find(carId, true);
+	if (!model)
+		return nullptr;
+	MsvcRandom &rnd = g_engine->_rnd;
+	CarInstance *car = new CarInstance(model, rnd);
+	_cars.push_back(car);
+	_car = car;
+	// The three ranges are drawn fraction first, then spread, then centre
+	const SkillLevel &s = skillLevel(_skillIndex);
+	const float fraction = s.partFraction[0] + rnd.frand(s.partFraction[1] - s.partFraction[0]);
+	const float spread = s.condSpread[0] + rnd.frand(s.condSpread[1] - s.condSpread[0]);
+	const float centre = s.condCentre[0] + rnd.frand(s.condCentre[1] - s.condCentre[0]);
+	car->randomize(centre, spread, fraction);
+	ensureBank(car);
+	car->_careerNum = _totalCareerAutos++;
+	return car;
+}
+
+void Mechanic::buyCar(CarInstance *car, float price) {
+	_car = car;
+	_cash -= price;
+	_cars.push_back(car);
+	ensureBank(car);
+	car->_careerNum = _totalCareerAutos;
+	car->_purchaseCost = price;
+	_totalCareerAutos++;
+	g_engine->_snd->play("misc\\cashreg.wav");
+}
+
+void Mechanic::sellCurrentCar(float price) {
+	for (uint i = 0; i < _cars.size(); i++) {
+		if (_cars[i] == _car) {
+			_cars.remove_at(i);
+			break;
+		}
+	}
+	// The sold car object goes to the auction; it is not deleted here
+	_car = nullptr;
+	_cash = price + _cash;
+	g_engine->_snd->play("misc\\cashreg.wav");
+}
+
+PartsBank *Mechanic::findBank(int modelId) const {
+	for (uint i = 0; i < _banks.size(); i++)
+		if (_banks[i]->modelId == modelId)
+			return _banks[i];
+	return nullptr;
+}
+
 // ---------------------------------------------------------------- parts
 
 void Mechanic::ensureBank(CarInstance *car) {
 	const int modelId = car->model()->_id;
-	for (uint i = 0; i < _banks.size(); i++) {
-		if (_banks[i]->modelId == modelId) {
-			_bank = _banks[i];
-			return;
-		}
+	if (findBank(modelId)) {
+		_bank = findBank(modelId);
+		return;
 	}
 	PartsBank *b = new PartsBank();
 	b->modelId = modelId;
@@ -369,6 +422,57 @@ void Mechanic::seedBank(CarInstance *car, PartsBank *bank) {
 			continue;
 		const int cond = (int)rnd.frand(3.999f);
 		bank->yard.push_back(createPart(model, defs[idx], cond, rnd));
+	}
+}
+
+void Mechanic::restockYard() {
+	if (!_bank || !_car)
+		return;
+	MsvcRandom &rnd = g_engine->_rnd;
+	const CarModel *model = _car->model();
+	const int n = (int)rnd.frand(4.0f);
+	for (int i = 0; i < n; i++) {
+		int coin = (int)rnd.frand(1.999f);
+		if (_bank->yard.empty())
+			coin = 1;
+		if (coin == 0) {
+			const int idx = (int)rnd.frand((float)_bank->yard.size() - 0.01f);
+			delete _bank->yard[idx];
+			_bank->yard.remove_at(idx);
+		} else {
+			for (int t = 0; t < 100; t++) {
+				const int idx = (int)rnd.frand((float)model->_parts.size() - 0.01f);
+				const PartDef *pd = model->_parts[idx];
+				if (pd->special == 4)
+					continue;
+				const int cond = (int)rnd.frand(3.999f);
+				_bank->yard.push_back(createPart(model, pd, cond, rnd));
+				break;
+			}
+		}
+	}
+}
+
+bool Mechanic::buyYardPart(Part *part) {
+	if (!_bank)
+		return false;
+	bool inYard = false;
+	for (uint i = 0; i < _bank->yard.size(); i++)
+		if (_bank->yard[i] == part)
+			inYard = true;
+	if (!inYard || !pay((int)part->junkPrice(), false))
+		return false;
+	removeFrom(_bank->yard, part);
+	_bank->bin.push_back(part);
+	return true;
+}
+
+void Mechanic::returnYardPart(Part *part) {
+	// Mechanic_pay with a negative amount always succeeds: cash up, repair cost down
+	pay(-(int)part->junkPrice(), false);
+	if (_bank) {
+		removeFrom(_bank->bin, part);
+		_bank->yard.push_back(part);
 	}
 }
 

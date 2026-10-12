@@ -23,11 +23,13 @@
 #include "graphics/managed_surface.h"
 
 #include "gearhead/car.h"
+#include "gearhead/carlot.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
 #include "gearhead/jobengine.h"
 #include "gearhead/jobs.h"
+#include "gearhead/junkyard.h"
 #include "gearhead/mechanic.h"
 #include "gearhead/resources.h"
 #include "gearhead/signin.h"
@@ -194,7 +196,13 @@ void CarActionsPane::onShowConditionRelease(Button *b) {
 }
 
 void CarActionsPane::onPutInLot(Button *b) {
-	notImplemented("The Car Lot");
+	// CarActions_onPutCarInLot (0x41014d): the car stays in the lot list
+	Mechanic *m = g_engine->_mechanic;
+	if (!m->_car)
+		return;
+	g_engine->_workShop->forgetCar();
+	m->_car = nullptr;
+	g_engine->_carLot->activate();
 }
 
 void CarActionsPane::onGetJob(Button *b) {
@@ -259,11 +267,11 @@ void NavPane::onAuction(Button *b) {
 
 void NavPane::onCarLot(Button *b) {
 	if (!g_engine->_mechanic->_job)
-		notImplemented("The Car Lot");
+		g_engine->_carLot->activate();
 }
 
 void NavPane::onJunkYard(Button *b) {
-	notImplemented("The JunkYard");
+	g_engine->_junkYard->activate();
 }
 
 void NavPane::onExit(Button *b) {
