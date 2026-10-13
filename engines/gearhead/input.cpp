@@ -126,6 +126,16 @@ bool Input::poll() {
 		case Common::EVENT_KEYUP:
 			handleKey(toScanCode(e.kbd), e.kbd.ascii, false);
 			break;
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_START:
+		case Common::EVENT_CUSTOM_ENGINE_ACTION_END: {
+			// The keymapper's actions: the keys the original reads
+			static const int kActionScan[] = { 0, kScanUp, kScanDown, kScanLeft, kScanRight, kScanEsc };
+			if (e.customType > kActionNone && e.customType <= kActionBack) {
+				const int scan = kActionScan[e.customType];
+				handleKey(scan, scan == kScanEsc ? 27 : 0, e.type == Common::EVENT_CUSTOM_ENGINE_ACTION_START);
+			}
+			break;
+		}
 		case Common::EVENT_QUIT:
 		case Common::EVENT_RETURN_TO_LAUNCHER:
 			keepRunning = false;

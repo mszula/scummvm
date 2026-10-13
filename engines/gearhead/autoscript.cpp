@@ -20,6 +20,7 @@
  */
 
 #include "common/debug.h"
+#include "common/events.h"
 #include "common/file.h"
 #include "common/fs.h"
 #include "common/stream.h"
@@ -239,6 +240,17 @@ void AutoScript::execute(const Common::String &line) {
 	} else if (cmd == "dumpauction") {
 		if (g_engine->_auction)
 			g_engine->_auction->debugDump();
+	} else if (cmd == "pushaction") {
+		// Test helper: "pushaction up|down|left|right|back start|end", the event the keymapper sends
+		static const char *const kNames[] = { "", "up", "down", "left", "right", "back" };
+		const Common::String name = tok.nextToken();
+		Common::Event e;
+		e.type = tok.nextToken() == "end" ? Common::EVENT_CUSTOM_ENGINE_ACTION_END : Common::EVENT_CUSTOM_ENGINE_ACTION_START;
+		e.customType = kActionNone;
+		for (int i = 1; i <= kActionBack; i++)
+			if (name == kNames[i])
+				e.customType = i;
+		g_system->getEventManager()->pushEvent(e);
 	} else if (cmd == "buypart") {
 		// Test helper: buy a part of the current car from the catalog (into the bin)
 		Mechanic *m = g_engine->_mechanic;

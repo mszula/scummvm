@@ -688,6 +688,11 @@ void WorkShopScreen::debugDump(const Common::String &what) {
 		}
 		return;
 	}
+	if (what == "view") {
+		const Vec3 &a = _carView.angles();
+		debug("dump view angles %.3f %.3f %.3f dist %.2f", a.x, a.y, a.z, _carView.dist());
+		return;
+	}
 	if (what == "spray") {
 		_sprayCan->debugDump();
 		return;

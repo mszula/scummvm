@@ -19,11 +19,15 @@
  *
  */
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
 #include "common/translation.h"
 
 #include "gearhead/metaengine.h"
 #include "gearhead/detection.h"
 #include "gearhead/gearhead.h"
+#include "gearhead/input.h"
 
 namespace Gearhead {
 
@@ -59,6 +63,46 @@ Common::Error GearheadMetaEngine::createInstance(OSystem *syst, Engine **engine,
 
 bool GearheadMetaEngine::hasFeature(MetaEngineFeature f) const {
 	return false;
+}
+
+Common::KeymapArray GearheadMetaEngine::initKeymaps(const char *target) const {
+	using namespace Common;
+	Keymap *keymap = new Keymap(Keymap::kKeymapTypeGame, "gearhead-default", _("Default keymappings"));
+	Action *act;
+
+	act = new Action(kStandardActionLeftClick, _("Left click"));
+	act->setLeftClickEvent();
+	act->addDefaultInputMapping("MOUSE_LEFT");
+	act->addDefaultInputMapping("JOY_A");
+	keymap->addAction(act);
+
+	act = new Action(kStandardActionRightClick, _("Right click (hold to turn the car)"));
+	act->setRightClickEvent();
+	act->addDefaultInputMapping("MOUSE_RIGHT");
+	act->addDefaultInputMapping("JOY_B");
+	keymap->addAction(act);
+
+	static const struct {
+		const char *id;
+		const char *description;
+		Gearhead::KeyAction action;
+		const char *key;
+		const char *joy;
+	} kKeys[] = {
+		{ "UP", _s("Turn the car up / walk forward"), Gearhead::kActionUp, "UP", "JOY_UP" },
+		{ "DOWN", _s("Turn the car down / walk back"), Gearhead::kActionDown, "DOWN", "JOY_DOWN" },
+		{ "LEFT", _s("Turn the car left / walk left"), Gearhead::kActionLeft, "LEFT", "JOY_LEFT" },
+		{ "RIGHT", _s("Turn the car right / walk right"), Gearhead::kActionRight, "RIGHT", "JOY_RIGHT" },
+		{ "BACK", _s("Back / cancel"), Gearhead::kActionBack, "ESCAPE", "JOY_X" }
+	};
+	for (uint i = 0; i < ARRAYSIZE(kKeys); i++) {
+		act = new Action(kKeys[i].id, _(kKeys[i].description));
+		act->setCustomEngineActionEvent(kKeys[i].action);
+		act->addDefaultInputMapping(kKeys[i].key);
+		act->addDefaultInputMapping(kKeys[i].joy);
+		keymap->addAction(act);
+	}
+	return Keymap::arrayOf(keymap);
 }
 
 #if PLUGIN_ENABLED_DYNAMIC(GEARHEAD)

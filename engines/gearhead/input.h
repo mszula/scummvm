@@ -56,6 +56,16 @@ enum ScanCode {
 	kScanDelete = 0x53
 };
 
+/** Keymapper actions (custom engine actions); each one stands for the key the game reads */
+enum KeyAction {
+	kActionNone = 0,
+	kActionUp,
+	kActionDown,
+	kActionLeft,
+	kActionRight,
+	kActionBack
+};
+
 /** Text-entry hook (ALIBI KeyState callback): called for every key event as it arrives */
 class KeyHook {
 public:
