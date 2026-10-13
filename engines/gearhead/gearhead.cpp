@@ -25,6 +25,7 @@
 #include "common/debug.h"
 #include "common/savefile.h"
 #include "common/system.h"
+#include "common/translation.h"
 #include "engines/util.h"
 #include "graphics/managed_surface.h"
 
@@ -56,7 +57,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
 	_auction(nullptr), _carLot(nullptr), _catalog(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
-	_prevGameTime(0), _frameDelta(0.1f), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
+	_prevGameTime(0), _frameDelta(0.1f), _pendingLoad(-1), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
 	g_engine = this;
 }
 
@@ -84,13 +85,74 @@ GearheadEngine::~GearheadEngine() {
 }
 
 bool GearheadEngine::hasFeature(EngineFeature f) const {
-	return f == kSupportsReturnToLauncher;
+	return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime;
 }
 
 // ---------------------------------------------------------------- profiles
 
+Common::String mechanicFileName(const Common::String &target, int id) {
+	return Common::String::format("%s-mechanic%d.mek", target.c_str(), id);
+}
+
 Common::String GearheadEngine::mechanicSaveName(int id) const {
-	return Common::String::format("%s-mechanic%d.mek", _targetName.c_str(), id);
+	return mechanicFileName(_targetName, id);
+}
+
+// ---------------------------------------------------------------- ScummVM saves
+
+bool GearheadEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	// A dialog open makes the dialog the root; a job is ended by the workshop's Exit only
+	const Widget *root = _input ? _input->root() : nullptr;
+	if (_pendingLoad < 0 && ((root == _workShop && _mechanic && !_mechanic->_job) || (root && root == _signIn)))
+		return true;
+	if (msg)
+		*msg = _("Mechanics can be loaded in the workshop when no job is running, or on the sign-in screen.");
+	return false;
+}
+
+bool GearheadEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	const Widget *root = _input ? _input->root() : nullptr;
+	if (_pendingLoad < 0 && root == _workShop && _mechanic && !_mechanic->_job && !_mechanic->isDev())
+		return true;
+	if (msg)
+		*msg = _mechanic && _mechanic->isDev() ? _("The developer mechanics are not saved.")
+		                                      : _("Mechanics can be saved in the workshop when no job is running.");
+	return false;
+}
+
+Common::Error GearheadEngine::loadGameState(int slot) {
+	if (slot < 0 || slot >= kNumMechanicSlots || !mechanicExists(slot))
+		return Common::kReadingFailed;
+	_pendingLoad = slot;
+	return Common::kNoError;
+}
+
+void GearheadEngine::loadPendingSlot() {
+	const int slot = _pendingLoad;
+	_pendingLoad = -1;
+	// Signing out like the workshop's Exit saves the mechanic
+	if (_mechanic && !_mechanic->isDev() && !_mechanic->_job)
+		_mechanic->saveToDisk();
+	if (!_signIn->signInSlot(slot))
+		warning("Cannot sign in the mechanic of slot %d", slot);
+}
+
+Common::Error GearheadEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	// The description is the mechanic's name, the text typed in the save dialog is not used
+	if (slot < 0 || slot >= kNumMechanicSlots || !_mechanic)
+		return Common::kWritingFailed;
+	// In another slot the copy becomes the mechanic of that slot
+	const int id = _mechanic->_id;
+	_mechanic->_id = slot;
+	Common::WriteStream *ws = createMechanic(slot);
+	bool ok = ws && _mechanic->save(*ws);
+	if (ws) {
+		ws->finalize();
+		ok = ok && !ws->err();
+		delete ws;
+	}
+	_mechanic->_id = id;
+	return ok ? Common::kNoError : Common::kWritingFailed;
 }
 
 Common::SeekableReadStream *GearheadEngine::openMechanic(int id) {
@@ -146,6 +208,8 @@ void GearheadEngine::importOriginalSaves() {
 bool GearheadEngine::runFrame() {
 	if (_quitRequested)
 		return false;
+	if (_pendingLoad >= 0)
+		loadPendingSlot();
 	if (!_input->poll() || shouldQuit()) {
 		// Closing the window / quitting through ScummVM behaves like Alt+F4
 		_saveOnQuit = true;
@@ -307,6 +371,8 @@ void GearheadEngine::startGame() {
 		_mechanic->_clockTime = gameTimeMs();
 		_workShop->activate();
 		_jobEngine->offerJob();
+	} else if (ConfMan.getInt("save_slot") >= 0 && _signIn->signInSlot(ConfMan.getInt("save_slot"))) {
+		// Loaded from the launcher: that mechanic signs in
 	} else {
 		_signIn->activate(true);
 	}

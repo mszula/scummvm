@@ -119,6 +119,8 @@ public:
 	void repaint();
 
 	void signIn(ProfileRow *row);
+	/** Signs in the mechanic of a slot and opens the workshop (also the ScummVM load) */
+	bool signInSlot(int slot);
 	void createMechanic(const Common::String &name);
 	void askDelete(ProfileRow *row);
 

@@ -363,25 +363,36 @@ void SignInScreen::onRefresh() {
 
 void SignInScreen::signIn(ProfileRow *row) {
 	// ProfileRow_onLButtonUp (0x42c5d8)
+	signInSlot(row->slot());
+}
+
+bool SignInScreen::signInSlot(int slot) {
+	MechSummary summary;
+	Common::SeekableReadStream *s = g_engine->openMechanic(slot);
+	const bool listed = s && summary.load(*s);
+	delete s;
+	if (!listed)
+		return false;
 	g_engine->_jukebox->stopTrack();
 	// The original loads Mechanics\<MECH_ID>.mek, not the slot's file
-	const int id = g_engine->fixOriginalBugs() ? row->slot() : row->summary()->id;
-	Common::SeekableReadStream *s = g_engine->openMechanic(id);
+	const int id = g_engine->fixOriginalBugs() ? slot : summary.id;
+	s = g_engine->openMechanic(id);
 	Mechanic *m = new Mechanic();
 	if (!s || !m->load(*s)) {
 		delete s;
 		delete m;
 		warning("Cannot load mechanic %d", id);
-		return;
+		return false;
 	}
 	delete s;
 	delete g_engine->_mechanic;
 	g_engine->_mechanic = m;
-	m->_id = row->summary()->id;
+	m->_id = summary.id;
 	_zipper->play();
 	m->_clockTime = g_engine->gameTimeMs();
 	_active = false;
 	g_engine->_workShop->activate();
+	return true;
 }
 
 void SignInScreen::createMechanic(const Common::String &name) {

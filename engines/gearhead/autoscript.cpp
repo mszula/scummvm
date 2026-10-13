@@ -26,6 +26,7 @@
 #include "common/stream.h"
 #include "common/system.h"
 #include "common/tokenizer.h"
+#include "engines/metaengine.h"
 
 #include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
@@ -240,6 +241,41 @@ void AutoScript::execute(const Common::String &line) {
 	} else if (cmd == "dumpauction") {
 		if (g_engine->_auction)
 			g_engine->_auction->debugDump();
+	} else if (cmd == "putmech") {
+		// Test helper: "putmech SLOT HOSTFILE" copies a .mek file into a mechanic slot
+		Common::String rest = line.substr(7);
+		rest.trim();
+		const int slot = atoi(rest.c_str());
+		const size_t space = rest.findFirstOf(' ');
+		Common::String path = space == Common::String::npos ? Common::String() : rest.substr(space + 1);
+		path.trim();
+		Common::File in;
+		Common::WriteStream *out = in.open(Common::FSNode(Common::Path(path, '/'))) ? g_engine->createMechanic(slot) : nullptr;
+		if (!out) {
+			warning("AutoScript: %s failed", line.c_str());
+		} else {
+			byte buf[4096];
+			uint32 n;
+			while ((n = in.read(buf, sizeof(buf))) > 0)
+				out->write(buf, n);
+			out->finalize();
+			delete out;
+		}
+	} else if (cmd == "scummvmsave" || cmd == "scummvmload") {
+		// Test helpers: what ScummVM's menu does for a slot
+		const int slot = atoi(tok.nextToken().c_str());
+		Common::U32String msg;
+		const bool save = cmd == "scummvmsave";
+		const bool can = save ? g_engine->canSaveGameStateCurrently(&msg) : g_engine->canLoadGameStateCurrently(&msg);
+		Common::Error err = Common::kNoError;
+		if (can)
+			err = save ? g_engine->saveGameState(slot, "", false) : g_engine->loadGameState(slot);
+		debug("AutoScript: %s %d: allowed %d, %s%s", cmd.c_str(), slot, can, can ? err.getDesc().c_str() : "",
+		      can ? "" : msg.encode().c_str());
+	} else if (cmd == "listsaves") {
+		const SaveStateList saves = g_engine->getMetaEngine()->listSaves(g_engine->targetName().c_str());
+		for (uint i = 0; i < saves.size(); i++)
+			debug("AutoScript: save slot %d: %s", saves[i].getSaveSlot(), saves[i].getDescription().c_str());
 	} else if (cmd == "pushaction") {
 		// Test helper: "pushaction up|down|left|right|back start|end", the event the keymapper sends
 		static const char *const kNames[] = { "", "up", "down", "left", "right", "back" };

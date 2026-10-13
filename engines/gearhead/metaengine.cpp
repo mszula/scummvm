@@ -22,12 +22,16 @@
 #include "backends/keymapper/action.h"
 #include "backends/keymapper/keymap.h"
 #include "backends/keymapper/standard-actions.h"
+#include "common/config-manager.h"
+#include "common/savefile.h"
+#include "common/system.h"
 #include "common/translation.h"
 
 #include "gearhead/metaengine.h"
 #include "gearhead/detection.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/input.h"
+#include "gearhead/mechanic.h"
 
 namespace Gearhead {
 
@@ -62,7 +66,55 @@ Common::Error GearheadMetaEngine::createInstance(OSystem *syst, Engine **engine,
 }
 
 bool GearheadMetaEngine::hasFeature(MetaEngineFeature f) const {
-	return false;
+	return f == kSupportsListSaves || f == kSupportsLoadingDuringStartup || f == kSupportsDeleteSave ||
+	       f == kSavesSupportMetaInfo;
+}
+
+static Common::String targetOrActive(const char *target) {
+	return target ? Common::String(target) : ConfMan.getActiveDomainName();
+}
+
+/** "Name (Skill, $cash)" from the mechanic file of a slot; false when the slot is empty */
+static bool describeMechanic(const Common::String &file, Common::String &desc) {
+	Common::SeekableReadStream *s = g_system->getSavefileManager()->openForLoading(file);
+	Gearhead::MechSummary summary;
+	const bool ok = s && summary.load(*s);
+	delete s;
+	if (ok) {
+		Common::String cash = summary.cash;
+		cash.trim();
+		desc = Common::String::format("%s (%s, $%s)", summary.name.c_str(), summary.skill.c_str(), cash.c_str());
+	}
+	return ok;
+}
+
+Common::String GearheadMetaEngine::getSavegameFile(int saveGameIdx, const char *target) const {
+	return Gearhead::mechanicFileName(targetOrActive(target), saveGameIdx);
+}
+
+SaveStateList GearheadMetaEngine::listSaves(const char *target) const {
+	SaveStateList saves;
+	for (int slot = 0; slot < Gearhead::kNumMechanicSlots; slot++) {
+		Common::String desc;
+		if (describeMechanic(getSavegameFile(slot, target), desc))
+			saves.push_back(SaveStateDescriptor(this, slot, desc));
+	}
+	return saves;
+}
+
+int GearheadMetaEngine::getMaximumSaveSlot() const {
+	return Gearhead::kNumMechanicSlots - 1;
+}
+
+bool GearheadMetaEngine::removeSaveState(const char *target, int slot) const {
+	return g_system->getSavefileManager()->removeSavefile(getSavegameFile(slot, target));
+}
+
+SaveStateDescriptor GearheadMetaEngine::querySaveMetaInfos(const char *target, int slot) const {
+	Common::String desc;
+	if (!describeMechanic(getSavegameFile(slot, target), desc))
+		return SaveStateDescriptor();
+	return SaveStateDescriptor(this, slot, desc);
 }
 
 Common::KeymapArray GearheadMetaEngine::initKeymaps(const char *target) const {

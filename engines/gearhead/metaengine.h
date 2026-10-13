@@ -34,6 +34,14 @@ public:
 
 	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override;
 
+	/** The save slots are the ten sign-in slots, one mechanic file each */
+	SaveStateList listSaves(const char *target) const override;
+	int getMaximumSaveSlot() const override;
+	bool removeSaveState(const char *target, int slot) const override;
+	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override;
+	Common::String getSavegameFile(int saveGameIdx, const char *target = nullptr) const override;
+	int getAutosaveSlot() const override { return -1; }
+
 	Common::KeymapArray initKeymaps(const char *target) const override;
 };
 

@@ -80,6 +80,19 @@ public:
 
 	bool hasFeature(EngineFeature f) const override;
 
+	/**
+	 * The ScummVM save slots are the ten sign-in slots: loading signs in the
+	 * mechanic of the slot, saving writes the current mechanic to the slot (a
+	 * copy when it is another slot). Only in the workshop with no job running
+	 * (loading also on the sign-in screen); there is no autosave slot.
+	 */
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	Common::Error loadGameState(int slot) override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	Common::String getSaveStateName(int slot) const override { return mechanicSaveName(slot); }
+	int getAutosaveSlot() const override { return -1; }
+
 	/** Option "fix_original_bugs": off = behave exactly like the original */
 	bool fixOriginalBugs() const { return _fixOriginalBugs; }
 
@@ -157,6 +170,8 @@ private:
 	/** CmdLine_startGame (0x44f2e9): the dev starts -CarID / -JobID, else the sign-in screen */
 	void startGame();
 	void tickTimer();
+	/** The ScummVM load, done at the start of a frame (it is requested from inside the event polling) */
+	void loadPendingSlot();
 
 	const ADGameDescription *_gameDescription;
 	bool _fixOriginalBugs;
@@ -167,7 +182,11 @@ private:
 	uint32 _gameTime;
 	uint32 _prevGameTime;
 	float _frameDelta;
+	int _pendingLoad;   ///< slot to sign in at the next frame, -1 = none
 };
+
+/** The save file of a mechanic: <target>-mechanic<id>.mek */
+Common::String mechanicFileName(const Common::String &target, int id);
 
 extern GearheadEngine *g_engine;
 
