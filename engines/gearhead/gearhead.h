@@ -117,6 +117,9 @@ public:
 	/** Smoothed frame time in seconds (g_FrameDelta, Timer_update 0x454d24) */
 	float frameDelta() const { return _frameDelta; }
 
+	/** Timer_tick (0x454d24): advance the game time and the smoothed frame time */
+	void tickTimer();
+
 	/** Ask the main loop to end without saving (the sign-in screen's Exit / quit flag) */
 	void requestQuit() { _quitRequested = true; }
 
@@ -169,7 +172,7 @@ private:
 	void runStartup();
 	/** CmdLine_startGame (0x44f2e9): the dev starts -CarID / -JobID, else the sign-in screen */
 	void startGame();
-	void tickTimer();
+	void pauseEngineIntern(bool pause) override;
 	/** The ScummVM load, done at the start of a frame (it is requested from inside the event polling) */
 	void loadPendingSlot();
 
@@ -182,6 +185,7 @@ private:
 	uint32 _gameTime;
 	uint32 _prevGameTime;
 	float _frameDelta;
+	uint32 _pauseStart;
 	int _pendingLoad;   ///< slot to sign in at the next frame, -1 = none
 };
 

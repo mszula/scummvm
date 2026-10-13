@@ -57,7 +57,7 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
 	_auction(nullptr), _carLot(nullptr), _catalog(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
-	_prevGameTime(0), _frameDelta(0.1f), _pendingLoad(-1), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
+	_prevGameTime(0), _frameDelta(0.1f), _pauseStart(0), _pendingLoad(-1), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
 	g_engine = this;
 }
 
@@ -153,6 +153,15 @@ Common::Error GearheadEngine::saveGameState(int slot, const Common::String &desc
 	}
 	_mechanic->_id = id;
 	return ok ? Common::kNoError : Common::kWritingFailed;
+}
+
+void GearheadEngine::pauseEngineIntern(bool pause) {
+	Engine::pauseEngineIntern(pause);
+	// The game clock stands still while ScummVM's menu is open
+	if (pause)
+		_pauseStart = g_system->getMillis();
+	else
+		_startTime += g_system->getMillis() - _pauseStart;
 }
 
 Common::SeekableReadStream *GearheadEngine::openMechanic(int id) {

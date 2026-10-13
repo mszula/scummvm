@@ -287,6 +287,16 @@ void AutoScript::execute(const Common::String &line) {
 			if (name == kNames[i])
 				e.customType = i;
 		g_system->getEventManager()->pushEvent(e);
+	} else if (cmd == "pausetest") {
+		// Test helper: "pausetest MS" pauses the engine like ScummVM's menu; the game time must not move
+		const uint32 ms = atoi(tok.nextToken().c_str());
+		g_engine->tickTimer();
+		const uint32 before = g_engine->gameTimeMs();
+		PauseToken pt = g_engine->pauseEngine();
+		g_system->delayMillis(ms);
+		pt.clear();
+		g_engine->tickTimer();
+		debug("AutoScript: pausetest %u ms: game time %u -> %u", ms, before, g_engine->gameTimeMs());
 	} else if (cmd == "buypart") {
 		// Test helper: buy a part of the current car from the catalog (into the bin)
 		Mechanic *m = g_engine->_mechanic;
