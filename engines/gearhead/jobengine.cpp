@@ -164,7 +164,7 @@ void JobDialog::showComplete(Job &job) {
 // ---------------------------------------------------------------- JobEngine
 
 JobEngine::JobEngine() : _tabImage(nullptr), _tabErase(nullptr), _current(nullptr), _offerSound(nullptr),
-	_tabSound(nullptr), _savedCash(0), _cheatLatch(false) {
+	_tabSound(nullptr), _savedCash(0), _cheatLatch(false), _completionRequested(false) {
 	_tab.setOnClick(makeCallback(this, &JobEngine::onTabClick));
 }
 
@@ -204,8 +204,10 @@ void JobEngine::update() {
 	if (!_cheatLatch)
 		cheat = in->isKeyDown(kScanPageUp) && in->isKeyDown(kScanInsert);
 	_cheatLatch = cheat;
-	if (_cheatLatch || _current->isComplete())
+	if (_cheatLatch || _completionRequested || _current->isComplete()) {
+		_completionRequested = false;
 		endJob(true, false);
+	}
 }
 
 void JobEngine::offerJob() {
@@ -223,6 +225,11 @@ void JobEngine::offerJob() {
 		m->_autoJobRequest = false;
 		return;
 	}
+	offer(job);
+}
+
+void JobEngine::offer(Job *job) {
+	Mechanic *m = g_engine->_mechanic;
 	g_engine->_jobs.loadPhaseImages(*job, *g_engine->_res);
 	_offerSound->play();
 	if (askRequest(*job, m->_autoJobRequest))

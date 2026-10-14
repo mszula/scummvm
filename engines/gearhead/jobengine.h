@@ -82,6 +82,10 @@ public:
 	void update();
 	/** JobEngine_offerJob (0x4483e9) */
 	void offerJob();
+	/** The second half of JobEngine_offerJob: the request dialog for @p job, then the start */
+	void offer(Job *job);
+	/** Console: the job ends as completed at the next update, like the PgUp + Insert cheat */
+	void requestCompletion() { _completionRequested = true; }
 	/** JobEngine_startJob (0x44859a) */
 	void startJob(Job *job);
 	/** JobEngine_endJob (0x44867a) */
@@ -108,6 +112,7 @@ private:
 	Sound *_tabSound;
 	int _savedCash;
 	bool _cheatLatch; ///< g_JobCheatLatch
+	bool _completionRequested;
 };
 
 } // End of namespace Gearhead

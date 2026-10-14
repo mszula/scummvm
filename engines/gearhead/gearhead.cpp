@@ -33,6 +33,7 @@
 #include "gearhead/autoscript.h"
 #include "gearhead/carlot.h"
 #include "gearhead/catalog.h"
+#include "gearhead/console.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -57,8 +58,9 @@ GearheadEngine::GearheadEngine(OSystem *syst, const ADGameDescription *gameDesc)
 	_cmdCarId(-1), _cmdSkill(0), _cmdJobId(-1), _signIn(nullptr), _workShop(nullptr),
 	_auction(nullptr), _carLot(nullptr), _catalog(nullptr), _junkYard(nullptr), _credits(nullptr),
 	_fixOriginalBugs(false), _quitRequested(false), _saveOnQuit(false), _startTime(0), _realTime(0), _gameTime(0),
-	_prevGameTime(0), _frameDelta(0.1f), _pauseStart(0), _pendingLoad(-1), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
+	_prevGameTime(0), _frameDelta(0.1f), _pauseStart(0), _pendingLoad(-1), _pendingJob(-1), _walkBobPhase(0.0f), _walkBobPrev(0.0f) {
 	g_engine = this;
+	setDebugger(new Console());
 }
 
 GearheadEngine::~GearheadEngine() {
@@ -219,6 +221,12 @@ bool GearheadEngine::runFrame() {
 		return false;
 	if (_pendingLoad >= 0)
 		loadPendingSlot();
+	if (_pendingJob >= 0 && _input->root() == _workShop && _mechanic && !_mechanic->_job) {
+		Job *job = _jobs.findById(_pendingJob);
+		_pendingJob = -1;
+		if (job)
+			_jobEngine->offer(job);
+	}
 	if (!_input->poll() || shouldQuit()) {
 		// Closing the window / quitting through ScummVM behaves like Alt+F4
 		_saveOnQuit = true;

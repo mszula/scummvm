@@ -26,6 +26,7 @@
 #include "gearhead/car.h"
 #include "gearhead/carlot.h"
 #include "gearhead/catalog.h"
+#include "gearhead/console.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -683,14 +684,14 @@ void WorkShopScreen::debugDump(const Common::String &what) {
 		for (uint i = 0; i < _bin._list.children().size(); i++) {
 			const PartButton *b = (const PartButton *)_bin._list.children()[i];
 			if (b->_part)
-				debug("dump bin %d: %s cond %d at %d %d", i, b->_part->def->name.c_str(), b->_part->condition,
+				dumpLine("dump bin %d: %s cond %d at %d %d", i, b->_part->def->name.c_str(), b->_part->condition,
 				      (b->rect().left + b->rect().right) / 2, (b->rect().top + b->rect().bottom) / 2);
 		}
 		return;
 	}
 	if (what == "view") {
 		const Vec3 &a = _carView.angles();
-		debug("dump view angles %.3f %.3f %.3f dist %.2f", a.x, a.y, a.z, _carView.dist());
+		dumpLine("dump view angles %.3f %.3f %.3f dist %.2f", a.x, a.y, a.z, _carView.dist());
 		return;
 	}
 	if (what == "spray") {
@@ -707,10 +708,10 @@ void WorkShopScreen::debugDump(const Common::String &what) {
 		const Part *p = car->_parts[i];
 		Common::Point sp;
 		if (debugPartScreenPos(p->def->id, sp))
-			debug("dump part %d '%s' region %d cond %d at %d %d", p->def->id, p->def->name.c_str(), p->def->region,
+			dumpLine("dump part %d '%s' region %d cond %d at %d %d", p->def->id, p->def->name.c_str(), p->def->region,
 			      p->condition, sp.x, sp.y);
 		else if (p->def->meshIndex >= 0 && car->_meshVisible[p->def->meshIndex])
-			debug("dump part %d '%s' region %d cond %d not clickable", p->def->id, p->def->name.c_str(), p->def->region, p->condition);
+			dumpLine("dump part %d '%s' region %d cond %d not clickable", p->def->id, p->def->name.c_str(), p->def->region, p->condition);
 	}
 }
 

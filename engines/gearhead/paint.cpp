@@ -25,6 +25,7 @@
 
 #include "gearhead/car.h"
 #include "gearhead/cardata.h"
+#include "gearhead/console.h"
 #include "gearhead/font.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
@@ -572,10 +573,10 @@ void SprayCan::debugDump() {
 	for (int y = 0; y < kGridSize; y++)
 		for (int x = 0; x < kGridSize; x++)
 			n += _cells[y][x].size();
-	debug("dump spray: %d triangles, origin (%.1f %.1f) cell %.1f x %.1f, %d cell entries, valid %d", _tris.size(), _originX,
+	dumpLine("dump spray: %d triangles, origin (%.1f %.1f) cell %.1f x %.1f, %d cell entries, valid %d", _tris.size(), _originX,
 	      _originY, _cellW, _cellH, n, _gridValid);
 	for (uint i = 0; i < _tris.size() && i < 5; i++)
-		debug("dump spray tri %d: (%.1f %.1f) (%.1f %.1f) (%.1f %.1f) area %.1f", i, _tris[i].x[0], _tris[i].y[0], _tris[i].x[1],
+		dumpLine("dump spray tri %d: (%.1f %.1f) (%.1f %.1f) (%.1f %.1f) area %.1f", i, _tris[i].x[0], _tris[i].y[0], _tris[i].x[1],
 		      _tris[i].y[1], _tris[i].x[2], _tris[i].y[2], _tris[i].area2);
 	const Common::Point c(195, 200);
 	Common::Point sc;
@@ -586,7 +587,7 @@ void SprayCan::debugDump() {
 		const Mesh3D *m = car->model()->_meshes[t.mesh];
 		const Vec3 w = m->local.transformPoint(m->vertices[m->polys[t.poly].v[0]].pos);
 		cv.project(w, sc);
-		debug("dump spray tri 0 vertex 0 renderer (%d %d) projector (%.1f %.1f)", sc.x, sc.y, t.x[0], t.y[0]);
+		dumpLine("dump spray tri 0 vertex 0 renderer (%d %d) projector (%.1f %.1f)", sc.x, sc.y, t.x[0], t.y[0]);
 	}
 	float u0 = 9, u1 = -9, v0 = 9, v1 = -9;
 	CarInstance *car = g_engine->_mechanic->_car;
@@ -599,10 +600,10 @@ void SprayCan::debugDump() {
 			v1 = MAX(v1, poly.uv[k][1]);
 		}
 	}
-	debug("dump spray uv range u %.3f..%.3f v %.3f..%.3f, texture %d", u0, u1, v0, v1, car->_paintTexture.size);
+	dumpLine("dump spray uv range u %.3f..%.3f v %.3f..%.3f, texture %d", u0, u1, v0, v1, car->_paintTexture.size);
 	{
 		const int cx = ftol(ftol(c.x - _originX) / _cellW), cy = ftol(ftol(c.y - _originY) / _cellH);
-		debug("dump spray cell (%d %d) has %d", cx, cy, (cx >= 0 && cy >= 0 && cx < 12 && cy < 12) ? _cells[cy][cx].size() : -1);
+		dumpLine("dump spray cell (%d %d) has %d", cx, cy, (cx >= 0 && cy >= 0 && cx < 12 && cy < 12) ? _cells[cy][cx].size() : -1);
 		int inside = 0;
 		for (uint i = 0; i < _tris.size(); i++) {
 			const Tri &t = _tris[i];
@@ -611,7 +612,7 @@ void SprayCan::debugDump() {
 			if (b1 >= 0 && b1 <= 1 && b2 >= 0 && b2 <= 1 && b1 + b2 <= 1)
 				inside++;
 		}
-		debug("dump spray triangles containing the point: %d", inside);
+		dumpLine("dump spray triangles containing the point: %d", inside);
 		int painted = 0, total = 0;
 		for (uint i = 0; i < car->_polyMaterials.size(); i++)
 			for (uint k = 0; k < car->_polyMaterials[i].size(); k++) {
@@ -619,7 +620,7 @@ void SprayCan::debugDump() {
 				if (car->_polyMaterials[i][k] == &car->_paintMaterial)
 					painted++;
 			}
-		debug("dump spray paint polys %d of %d", painted, total);
+		dumpLine("dump spray paint polys %d of %d", painted, total);
 		int best[3] = { -1, -1, -1 };
 		for (uint i = 0; i < _tris.size(); i++) {
 			const float a = fabsf(_tris[i].area2);
@@ -635,7 +636,7 @@ void SprayCan::debugDump() {
 		for (int k = 0; k < 3; k++)
 			if (best[k] >= 0) {
 				const Tri &t = _tris[best[k]];
-				debug("dump spray big tri %d at (%.0f %.0f) area %.0f", best[k], (t.x[0] + t.x[1] + t.x[2]) / 3,
+				dumpLine("dump spray big tri %d at (%.0f %.0f) area %.0f", best[k], (t.x[0] + t.x[1] + t.x[2]) / 3,
 				      (t.y[0] + t.y[1] + t.y[2]) / 3, t.area2);
 			}
 	}

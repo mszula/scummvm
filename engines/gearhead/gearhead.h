@@ -120,6 +120,9 @@ public:
 	/** Timer_tick (0x454d24): advance the game time and the smoothed frame time */
 	void tickTimer();
 
+	/** Console: offer job @p id in the workshop at the next frame */
+	void requestJob(int id) { _pendingJob = id; }
+
 	/** Ask the main loop to end without saving (the sign-in screen's Exit / quit flag) */
 	void requestQuit() { _quitRequested = true; }
 
@@ -187,6 +190,7 @@ private:
 	float _frameDelta;
 	uint32 _pauseStart;
 	int _pendingLoad;   ///< slot to sign in at the next frame, -1 = none
+	int _pendingJob;    ///< job the console offers at the next frame, -1 = none
 };
 
 /** The save file of a mechanic: <target>-mechanic<id>.mek */

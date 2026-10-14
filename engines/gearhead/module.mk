@@ -9,6 +9,7 @@ MODULE_OBJS = \
 	cardata.o \
 	carlot.o \
 	catalog.o \
+	console.o \
 	carview.o \
 	decals.o \
 	font.o \

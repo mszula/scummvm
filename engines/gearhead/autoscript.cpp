@@ -26,12 +26,11 @@
 #include "common/stream.h"
 #include "common/system.h"
 #include "common/tokenizer.h"
-#include "engines/metaengine.h"
 
-#include "gearhead/auction.h"
 #include "gearhead/autoscript.h"
 #include "gearhead/car.h"
 #include "gearhead/catalog.h"
+#include "gearhead/console.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -196,36 +195,15 @@ void AutoScript::execute(const Common::String &line) {
 			m->reloadFromDisk();
 			g_engine->_workShop->activate();
 		}
-	} else if (cmd == "givecar") {
-		// Test helper: a random car of model N (Mechanic_addNewCar, the dev-mode path)
-		const int id = atoi(tok.nextToken().c_str());
-		if (g_engine->_mechanic && g_engine->_mechanic->addNewCar(id))
-			g_engine->_workShop->activate();
-		else
-			warning("AutoScript: givecar %d failed", id);
-	} else if (cmd == "clickitem" || cmd == "dumpyard") {
-		// Test helpers for the junkyard: list / click the parts on the shelves of the current area
+	} else if (cmd == "clickitem") {
+		// Test helper for the junkyard: click the n-th part on the shelves of the current area
 		Common::Point p;
 		Common::String name;
-		if (cmd == "dumpyard") {
-			for (int i = 0; i < 64; i++) {
-				const bool ok = g_engine->_junkYard->_yard.debugItemScreenPos(i, p, name);
-				if (name.empty())
-					break;
-				debug("dump item %d '%s' %s %d %d", i, name.c_str(), ok ? "at" : "hidden", p.x, p.y);
-				name.clear();
-			}
-		} else {
-			const int n = atoi(tok.nextToken().c_str());
-			if (g_engine->_junkYard->_yard.debugItemScreenPos(n, p, name))
-				execute(Common::String::format("click %d %d", p.x, p.y));
-			else
-				warning("AutoScript: shelf item %d not found on screen", n);
-		}
-	} else if (cmd == "dump") {
-		// Test helper: screen positions of the car's parts / the bolts / the bin cells
-		const Common::String what = tok.nextToken();
-		g_engine->_workShop->debugDump(what);
+		const int n = atoi(tok.nextToken().c_str());
+		if (g_engine->_junkYard->_yard.debugItemScreenPos(n, p, name))
+			execute(Common::String::format("click %d %d", p.x, p.y));
+		else
+			warning("AutoScript: shelf item %d not found on screen", n);
 	} else if (cmd == "movepaint") {
 		// Test helper: the pointer to the centre of the n-th largest paint triangle on screen
 		Common::String arg = line.substr(9);
@@ -235,12 +213,6 @@ void AutoScript::execute(const Common::String &line) {
 			execute(Common::String::format("move %d %d", at.x, at.y));
 		else
 			warning("AutoScript: no paint triangle %s", arg.c_str());
-	} else if (cmd == "dumpcatalog") {
-		if (g_engine->_catalog)
-			g_engine->_catalog->debugDump();
-	} else if (cmd == "dumpauction") {
-		if (g_engine->_auction)
-			g_engine->_auction->debugDump();
 	} else if (cmd == "putmech") {
 		// Test helper: "putmech SLOT HOSTFILE" copies a .mek file into a mechanic slot
 		Common::String rest = line.substr(7);
@@ -272,10 +244,6 @@ void AutoScript::execute(const Common::String &line) {
 			err = save ? g_engine->saveGameState(slot, "", false) : g_engine->loadGameState(slot);
 		debug("AutoScript: %s %d: allowed %d, %s%s", cmd.c_str(), slot, can, can ? err.getDesc().c_str() : "",
 		      can ? "" : msg.encode().c_str());
-	} else if (cmd == "listsaves") {
-		const SaveStateList saves = g_engine->getMetaEngine()->listSaves(g_engine->targetName().c_str());
-		for (uint i = 0; i < saves.size(); i++)
-			debug("AutoScript: save slot %d: %s", saves[i].getSaveSlot(), saves[i].getDescription().c_str());
 	} else if (cmd == "pushaction") {
 		// Test helper: "pushaction up|down|left|right|back start|end", the event the keymapper sends
 		static const char *const kNames[] = { "", "up", "down", "left", "right", "back" };
@@ -297,14 +265,6 @@ void AutoScript::execute(const Common::String &line) {
 		pt.clear();
 		g_engine->tickTimer();
 		debug("AutoScript: pausetest %u ms: game time %u -> %u", ms, before, g_engine->gameTimeMs());
-	} else if (cmd == "buypart") {
-		// Test helper: buy a part of the current car from the catalog (into the bin)
-		Mechanic *m = g_engine->_mechanic;
-		const PartDef *pd = m && m->_car ? m->_car->model()->findPart(atoi(tok.nextToken().c_str())) : nullptr;
-		if (!pd || !g_engine->_catalog->buyPart(pd))
-			warning("AutoScript: %s failed", line.c_str());
-		else
-			g_engine->_workShop->_bin.refill();
 	} else if (cmd == "campaign") {
 		_campaign = true;
 		_campaignNext = 0;
@@ -312,7 +272,8 @@ void AutoScript::execute(const Common::String &line) {
 		debug("AutoScript: %s", line.substr(4).c_str());
 	} else if (cmd == "quit") {
 		g_engine->requestQuit();
-	} else {
+	} else if (!static_cast<Console *>(g_engine->getDebugger())->runLine(line)) {
+		// The rest are the console's commands
 		warning("AutoScript: unknown command '%s'", line.c_str());
 	}
 }

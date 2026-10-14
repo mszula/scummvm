@@ -22,6 +22,7 @@
 #include "graphics/managed_surface.h"
 
 #include "gearhead/car.h"
+#include "gearhead/console.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -534,7 +535,7 @@ void AirRatchet::debugDumpBolts() const {
 			continue;
 		Common::Point sp;
 		const bool ok = debugBoltScreenPos(i, sp);
-		debug("dump bolt %d at %d %d%s", i, sp.x, sp.y, ok ? "" : " (hidden)");
+		dumpLine("dump bolt %d at %d %d%s", i, sp.x, sp.y, ok ? "" : " (hidden)");
 	}
 }
 

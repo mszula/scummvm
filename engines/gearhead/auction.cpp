@@ -26,6 +26,7 @@
 
 #include "gearhead/auction.h"
 #include "gearhead/car.h"
+#include "gearhead/console.h"
 #include "gearhead/font.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
@@ -712,14 +713,14 @@ void AuctionScreen::onSkip(Button *b) {
 
 void AuctionScreen::debugDump() const {
 	const CarInstance *car = _bidPane.car();
-	debug("dump auction mode %d state %d car %d parts %d x %.1f moving %d | bid %d asking %d yours %d | value %d lo %d hi %d | "
+	dumpLine("dump auction mode %d state %d car %d parts %d x %.1f moving %d | bid %d asking %d yours %d | value %d lo %d hi %d | "
 	      "left %.2f sold %d",
 	      _mode, _state, car ? car->model()->_id : -1, car ? (int)car->_parts.size() : 0, _bidPane.carX(), _bidPane.moving(),
 	      _auctioneer._currentBid, _auctioneer._askingPrice, _auctioneer._yourBid, _auctioneer._partsValue, _auctioneer._lo,
 	      _auctioneer._hi, _auctioneer._timeLeft, _auctioneer._sold);
 	for (uint i = 0; i < _auctioneer._bidders.size(); i++) {
 		const Bidder &bd = _auctioneer._bidders[i];
-		debug("dump bidder %d aggr %.3f min %d max %d interest %.3f eager %.3f leader %d", i, bd.aggressiveness, bd.minPrice,
+		dumpLine("dump bidder %d aggr %.3f min %d max %d interest %.3f eager %.3f leader %d", i, bd.aggressiveness, bd.minPrice,
 		      bd.maxPrice, bd.interest, bd.eagerness, bd.leader);
 	}
 }

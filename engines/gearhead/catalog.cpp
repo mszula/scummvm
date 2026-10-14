@@ -24,6 +24,7 @@
 
 #include "gearhead/car.h"
 #include "gearhead/catalog.h"
+#include "gearhead/console.h"
 #include "gearhead/gearhead.h"
 #include "gearhead/gfx.h"
 #include "gearhead/input.h"
@@ -270,24 +271,24 @@ void CatalogScreen::onBuyDecal(Button *b) {
 }
 
 void CatalogScreen::debugDump() const {
-	debug("dump catalog page %d", _page);
+	dumpLine("dump catalog page %d", _page);
 	if (_page == kPageDecals) {
 		for (uint i = 0; i < _decalList.cells().size(); i++) {
 			const DecalCell *c = _decalList.cells()[i];
 			if (c->_data)
-				debug("dump decal %d '%s' at %d %d", i, c->_data->name.c_str(), c->rect().left + 24, c->rect().top + 24);
+				dumpLine("dump decal %d '%s' at %d %d", i, c->_data->name.c_str(), c->rect().left + 24, c->rect().top + 24);
 		}
 	} else {
 		for (uint i = 0; i < _parts.children().size(); i++) {
 			const PartButton *pb = static_cast<const PartButton *>(_parts.children()[i]);
 			if (pb->_def)
-				debug("dump catpart '%s' $%.2f at %d %d", pb->_def->name.c_str(), pb->_def->costMax,
+				dumpLine("dump catpart '%s' $%.2f at %d %d", pb->_def->name.c_str(), pb->_def->costMax,
 				      (pb->rect().left + pb->rect().right) / 2, (pb->rect().top + pb->rect().bottom) / 2);
 		}
 	}
 	const Mechanic *m = g_engine->_mechanic;
 	for (uint i = 0; i < m->_decals.size(); i++)
-		debug("dump owned decal %d x%d", m->_decals[i]->id, m->_decals[i]->copies);
+		dumpLine("dump owned decal %d x%d", m->_decals[i]->id, m->_decals[i]->copies);
 }
 
 } // End of namespace Gearhead
